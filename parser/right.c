@@ -22,7 +22,7 @@ RightOperator right_operator_table[128] = {
 	['('] = { 1, RightCall },
 	['*'] = { 3, RightAltBinary }, ['/'] = { 3 }, ['%'] = { 3 },
 	['+'] = { 4 }, ['-'] = { 4 },
-	[TokenIdentifier] = { 14, RightDeclaration },
+	[TokenIdentifier] = { 13, RightDeclaration },
 	['='] = { 14, RightAssignment },
 };
 

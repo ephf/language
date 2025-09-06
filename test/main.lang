@@ -1,1 +1,3 @@
-i32* extern malloc(usize n_bytes);
+i32 add(i32 a, i32 b) {
+    return a + b;
+}
