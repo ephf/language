@@ -31,6 +31,8 @@ Node* expression(Parser* parser) {
 }
 
 Variable* declaration(Node* type, Token identifier, Parser* parser) {
+	// TODO: insert scope before calling info to catch generic
+	// type declarations
 	if(!(type->flags & fType)) {
 		push(parser->tokenizer->messages, Err(type->trace,
 					str("expected a type before "
