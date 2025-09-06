@@ -8,6 +8,7 @@ typedef Vector(Node) Nodes;
 
 typedef union Type Type;
 typedef Vector(Type*) TypeList;
+typedef Vector(TypeList) TypeLists;
 
 typedef union Declaration Declaration;
 typedef Vector(Declaration*) DeclarationList;
@@ -20,11 +21,33 @@ typedef Vector(Declaration*) DeclarationList;
 
 #define extends_Type \
 	extends_Node
+typedef struct {
+	str identifier;
+	Declaration* declaration;
+} ScopeEntry;
+typedef Vector(ScopeEntry) ScopeEntries;
+
+typedef struct {
+	extends_Node;
+	Vector(ScopeEntries);
+	DeclarationList declarations;
+	NodeList children;
+	Declaration* parent;
+} Scope;
+typedef Vector(Scope*) Stack;
+void comp_Scope(Scope*, str*, Compiler*);
+
+typedef struct {
+	Scope* variant_set;
+	TypeLists variants;
+	TypeLists stack;
+} Generics;
 
 #define extends_Declaration \
 	extends_Node; \
 	Identifier* identifier; \
-	Node* const_value
+	Node* const_value; \
+	Generics generics;
 
 typedef struct {
 	extends_Node;
@@ -35,6 +58,8 @@ void comp_NumericLiteral(NumericLiteral*, str*, Compiler*);
 typedef struct {
 	extends_Type;
 	Type* ref;
+	TypeList generics;
+	Declaration* generics_declaration;
 } Auto;
 void comp_Auto(Auto*, str*, Compiler*);
 
@@ -54,21 +79,6 @@ typedef struct {
 typedef Vector(VariableDeclaration*) VariableDeclarationList;
 void comp_VariableDeclaration(VariableDeclaration*, str*, Compiler*);
 
-typedef struct {
-	str identifier;
-	Declaration* declaration;
-} ScopeEntry;
-typedef Vector(ScopeEntry) ScopeEntries;
-
-typedef struct {
-	extends_Node;
-	Vector(ScopeEntries);
-	DeclarationList declarations;
-	NodeList children;
-	Declaration* parent;
-} Scope;
-typedef Vector(Scope*) Stack;
-void comp_Scope(Scope*, str*, Compiler*);
 
 typedef struct {
 	extends_Node;
@@ -90,6 +100,7 @@ void comp_Statement(Statement*, str*, Compiler*);
 typedef struct {
 	extends_Node;
 	Declaration* declaration;
+	TypeList generics;
 	unsigned observed : 1;
 } Variable;
 void comp_Variable(Variable*, str*, Compiler*);
@@ -136,12 +147,20 @@ typedef struct {
 } PointerType;
 void comp_PointerType(PointerType*, str*, Compiler*);
 
+typedef struct {
+	extends_Type;
+	Declaration* declaration;
+	size_t index;
+} GenericType;
+void comp_GenericType(GenericType*, str*, Compiler*);
+
 union Type {
 	struct { extends_Type; };
 
 	Auto Auto;
 	External External;
 	Variable Variable;
+	GenericType GenericType;
 
 	FunctionType FunctionType;
 	PointerType PointerType;

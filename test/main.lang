@@ -1,3 +1,10 @@
-i32 add(i32 a, i32 b) {
-    return a + b;
+void test<T>(T a) {
 }
+
+auto x;
+auto y;
+
+test<typeof(x)>(y);
+
+i32 z;
+y = z;

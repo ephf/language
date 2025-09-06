@@ -1,10 +1,11 @@
-#include "parser.c"
+#include "generics.c"
 
 typedef struct {
 	Identifier* identifier;
 	Variable* value;
 	Scope* scope;
 	Trace trace;
+	GenericsCollection generics_collection;
 } IdentifierInfo;
 
 IdentifierInfo new_identifier(Token base_identifier, Parser* parser) {
@@ -24,6 +25,9 @@ IdentifierInfo new_identifier(Token base_identifier, Parser* parser) {
 		.scope = last(parser->stack),
 		.trace = base_identifier.trace,
 	};
+
+	if(info.value) assign_generics(info.value, parser);
+	else info.generics_collection = collect_generics(parser);
 
 	return info;
 }

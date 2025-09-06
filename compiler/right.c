@@ -45,6 +45,16 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 		Compiler* compiler) {
 	if(self->flags & fExternal) return;
 
+	if(self->generics.stack.size == 1) {
+		for(size_t i = 0; i < self->generics.variants.size; i++) {
+			push(&self->generics.stack,
+					self->generics.variants.data[i]);
+			self->compiler((void*) self, line, compiler);
+			self->generics.stack.size--;
+		}
+		return;
+	}
+
 	const size_t previous_section = compiler->open_section;
 	size_t section = compiler->open_section = compiler->sections.size;
 	push(&compiler->sections, (CompilerSection) { 0 });

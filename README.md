@@ -43,14 +43,14 @@ i32 x = 15;
 u32 y = u32 z = 14;
 ```
 
-```
-] int main() {
-]     int32_t x;
-]     uint32_t y;
-]     uint32_t z;
-]     (x = 15);
-]     (y = (z = 14));
-] }
+```c
+int main() {
+    int32_t x;
+    uint32_t y;
+    uint32_t z;
+    (x = 15);
+    (y = (z = 14));
+}
 ```
 
 Note that when defining constants with pointers, the `const` keyword will have a low precedence, e.g.
@@ -70,14 +70,48 @@ i32 add(i32 a, i32 b) {
 }
 ```
 
-```
-] int main() {
-] }
+```c
+int main() {
+}
 
-] int32_t add(int32_t a, int32_t b) {
-]     return (a + b);
-] }
+int32_t add(int32_t a, int32_t b) {
+    return (a + b);
+}
 ```
+
+> Note function declarations will be hoisted
+
+### Generics & Autos
+
+Here is an example of the compiler's ability to keep track of type relations:
+
+```
+void test<T>(T a) {
+}
+
+auto x;
+auto y;
+
+test<typeof(x)>(y);
+
+i32 z;
+y = z;
+```
+
+```c
+int main() {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+    test(y);
+    (y = z);
+}
+
+void test(int32_t a) {
+}
+```
+
+> Note generics are not fully finished and will result in overlapping function definitions.
 
 ## Ending / Notes
 

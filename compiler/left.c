@@ -6,12 +6,16 @@ void comp_NumericLiteral(NumericLiteral* self, str* line,
 }
 
 void comp_Auto(Auto* self, str* line, Compiler* compiler) {
-	if(self->ref) {
-		self->ref->compiler((void*) self->ref, line, compiler);
-		return;
+	const OpenedType opened = open_type((void*) self);
+	
+	if(opened.open_type->compiler == (void*) &comp_Auto) {
+		strf(line, "/* auto */ int");
+	} else {
+		opened.open_type->compiler((void*) opened.open_type, line,
+				compiler);
 	}
 
-	strf(line, "/* auto */ int");
+	close_type(opened.actions);
 }
 
 void comp_Identifier(Identifier* self, str* line, Compiler* compiler) {
@@ -56,4 +60,11 @@ void comp_Variable(Variable* self, str* line, Compiler* compiler) {
 
 	self->declaration->identifier->compiler(
 			(void*) self->declaration->identifier, line, compiler);
+}
+
+void comp_GenericType(GenericType* self, str* line,
+		Compiler* compiler) {
+	Type* const base = last(self->declaration->generics.stack)
+		.data[self->index];
+	base->compiler((void*) base, line, compiler);
 }

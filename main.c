@@ -45,6 +45,8 @@ void insert_std_numerics(Scope* std_scope) {
 	create_std_type(std_scope, str("UInt"), str("unsigned"));
 	create_std_type(std_scope, str("Long"), str("long"));
 	create_std_type(std_scope, str("ULong"), str("unsigned long"));
+
+	create_std_type(std_scope, str("void"), str("void"));
 }
 
 FunctionDeclaration* entry_declaration() {

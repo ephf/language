@@ -64,6 +64,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 		});
 		declaration->body = new_scope((void*) declaration);
 		function_type->declaration = declaration;
+		apply_generics((void*) declaration, info.generics_collection);
 
 		push(&parser->stack, declaration->body);
 		push(&info.scope->declarations, (void*) declaration);
@@ -197,7 +198,13 @@ outer_while:
 				TypeList signature = { 0 };
 				Type* return_type;
 
-				if(lefthand->type->compiler !=
+				const OpenedType opened_function_type =
+					open_type(lefthand->type);
+				Type* const open_function_type = opened_function_type
+					.open_type;
+
+
+				if(open_function_type->compiler !=
 						(void*) &comp_FunctionType) {
 					push(parser->tokenizer->messages, Err(
 								lefthand->trace,
@@ -208,7 +215,7 @@ outer_while:
 							.trace = lefthand->trace,
 					}});
 				} else {
-					signature = lefthand->type->FunctionType
+					signature = open_function_type->FunctionType
 						.signature;
 					return_type = signature.data[0];
 				}
@@ -224,7 +231,8 @@ outer_while:
 									str("too many arguments in "
 										"function call")));
 						push(parser->tokenizer->messages,
-								see_declaration((void*) lefthand->type
+								see_declaration(
+									(void*) open_function_type
 										->FunctionType.declaration,
 									lefthand));
 						break;
@@ -247,6 +255,7 @@ outer_while:
 								lefthand));
 				}
 				
+				close_type(opened_function_type.actions);
 				return new_node((Node) { .FunctionCall = {
 						.compiler = (void*) &comp_FunctionCall,
 						.type = return_type,

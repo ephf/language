@@ -1,5 +1,9 @@
 #include "identifier.c"
 
+enum {
+	StateActionGenerics,
+};
+
 typedef struct {
 	unsigned action;
 	Node* target;
@@ -11,16 +15,43 @@ typedef struct {
 	Type* open_type;
 } OpenedType;
 
-Type* open_type_interm(Type* type, TypeStateActions* actions) {
+Type* open_type_interm(Type* type, TypeStateActions* actions,
+		typeof(type->compiler) stop_at) {
+	if(type->compiler == stop_at) return type;
+
 	if(type->compiler == (void*) &comp_Auto && type->Auto.ref) {
-		return open_type_interm(type->Auto.ref, actions);
+		if(type->Auto.generics_declaration) {
+			push(&type->Auto.generics_declaration->generics.stack,
+					type->Auto.generics);
+			push(actions, ((TypeStateAction) {
+					.action = StateActionGenerics,
+					.target = (void*) type->Auto.generics_declaration,
+			}));
+		}
+
+		return open_type_interm(type->Auto.ref, actions, stop_at);
 	}
 
 	if(type->compiler == (void*) &comp_Variable
 			&& type->Variable.declaration->const_value) {
+		if(type->Variable.generics.size) {
+			push(&type->Variable.declaration->generics.stack,
+					type->Variable.generics);
+			push(actions, ((TypeStateAction) {
+					.action = StateActionGenerics,
+					.target = (void*) type->Auto.generics_declaration,
+			}));
+		}
+
 		return open_type_interm(
 				(void*) type->Variable.declaration->const_value,
-				actions);
+				actions, stop_at);
+	}
+
+	if(type->compiler == (void*) &comp_GenericType) {
+		return open_type_interm(
+				last(type->GenericType.declaration->generics.stack)
+					.data[type->GenericType.index], actions, stop_at);
 	}
 
 	return type;
@@ -29,13 +60,16 @@ Type* open_type_interm(Type* type, TypeStateActions* actions) {
 OpenedType open_type(Type* type) {
 	OpenedType opened_type = { 0 };
 	opened_type.open_type =
-		open_type_interm(type, &opened_type.actions);
+		open_type_interm(type, &opened_type.actions, 0);
 	return opened_type;
 }
 
 void close_type(TypeStateActions actions) {
 	for(size_t i = actions.size; i > 0; i--) {
 		switch(actions.data[i - 1].action) {
+			case StateActionGenerics:
+				actions.data[i - 1].target->Declaration.generics
+					.stack.size--;
 		}
 	}
 
@@ -73,12 +107,49 @@ void stringify_type(Type* type, str* string, unsigned flags) {
 	close_type(opened_type.actions);
 }
 
-int try_assign_auto_type(Type* open_a, Type* open_b, Type* b) {
+Type* clone_base_type(Type* type) {
+	const OpenedType opened = open_type(type);
+	Type* const open = opened.open_type;
+
+	Type* cloned = (void*) new_node(*(Node*)(void*) open);
+	close_type(opened.actions);
+	return cloned;
+}
+
+Type* make_type_standalone(Type* type) {
+	// TODO: traverse_type() function that traverses a types children
+	// (e.g. traversing pointers, function arguments, and generics)
+	TypeStateActions actions = { 0 };
+	Type* open;
+
+	while((open = open_type_interm(type, &actions,
+					(void*) &comp_GenericType))
+			->compiler == (void*) &comp_GenericType) {
+		Declaration* declaration = open->GenericType.declaration;
+
+		for(size_t i = declaration->generics.stack.size; i > 1; i--) {
+			type = new_type((Type) { .Auto = {
+					.compiler = (void*) &comp_Auto,
+					.trace = type->trace,
+					.flags = type->flags,
+					.generics = declaration->generics
+						.stack.data[i - 1],
+					.generics_declaration = declaration,
+					.ref = type,
+			}});
+		}
+	}
+
+	close_type(actions);
+	return type;
+}
+
+int try_assign_auto_type(Type* open_a, Type* open_b) {
 	if(open_a->compiler == (void*) &comp_Auto) {
 		if(open_a == open_b) return 1;
 		if(open_a->flags & tfNumeric && !(open_b->flags & tfNumeric))
 			return 0;
-		open_a->Auto.ref = b;
+		open_a->Auto.ref = make_type_standalone(open_b);
 		return 1;
 	}
 
@@ -112,8 +183,8 @@ int test_types(Type* a, Type* b, Trace trace, Messages* messages) {
 	close_type(opened_a.actions);
 	close_type(opened_b.actions);
 
-	if(try_assign_auto_type(open_b, open_a, a)
-			|| try_assign_auto_type(open_a, open_b, b)) return 1;
+	if(try_assign_auto_type(open_b, open_a)
+			|| try_assign_auto_type(open_a, open_b)) return 1;
 
 	else if(open_a->type == (void*) &comp_External) {
 		if(open_b->type != (void*) &comp_External
