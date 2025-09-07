@@ -97,7 +97,7 @@ i32* x = echo<typeof(echo(15))*>(auto y);
 int main() {
     int32_t* x;
     int32_t* y;
-    (x = echo(y));
+    (x = echo__int32_t_ptr(y));
 }
 
 int32_t echo__int32_t(int32_t value) {

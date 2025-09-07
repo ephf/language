@@ -68,6 +68,8 @@ void comp_Variable(Variable* self, str* line, Compiler* compiler) {
 
 	self->declaration->identifier->compiler(
 			(void*) self->declaration->identifier, line, compiler);
+	if(self->generics.size)
+		append_generics_identifier(line, self->generics);
 }
 
 void comp_GenericType(GenericType* self, str* line,
