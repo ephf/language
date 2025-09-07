@@ -51,23 +51,28 @@ void dual_function_compiler(FunctionDeclaration* self,
 	return_type->compiler((void*) return_type, &declaration_line,
 			compiler);
 
-	strf(&declaration_line, " %.*s",
+	strf(&declaration_line, " %.*s(",
 			(int) identifier.size, identifier.data);
-//  self->identifier->compiler((void*) self->identifier,
-// 			&declaration_line, compiler);
-// 	if(self->generics.stack.size)
-// 		append_generics_identifier(
-// 				&declaration_line, last(self->generics.stack));
-
-	strf(&declaration_line, "(");
 	for(size_t i = 0; i < self->arguments.size; i++) {
 		if(i) strf(&declaration_line, ", ");
-		self->arguments.data[i]->compiler(
-				(void*) self->arguments.data[i], &declaration_line,
-				compiler);
+		VariableDeclaration* const argument = self->arguments.data[i];
+
+		if(hoisted) {
+			argument->type->compiler((void*) argument->type,
+					&declaration_line, compiler);
+		} else {
+			argument->compiler((void*) argument, &declaration_line,
+					compiler);
+		}
 	}
-	strf(&declaration_line, ") {");
-	push(&compiler->sections.data[section].lines, declaration_line);
+	strf(&declaration_line, hoisted ? ");" : ") {");
+	push(&compiler->sections.data[section * !hoisted].lines,
+			declaration_line);
+
+	if(hoisted) {
+		compiler->open_section = previous_section;
+		return;
+	}
 
 	self->body->compiler((void*) self->body, &declaration_line,
 			compiler);
@@ -96,6 +101,8 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 					self->generics.variants.data[i]);
 			dual_function_compiler(self, compiler, identifiers.data[i],
 					0);
+			dual_function_compiler(self, compiler, identifiers.data[i],
+					1);
 			self->generics.stack.size--;
 		}
 
@@ -107,6 +114,7 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 	self->identifier->compiler((void*) self->identifier, &identifier,
 			compiler);
 	dual_function_compiler(self, compiler, identifier, 0);
+	dual_function_compiler(self, compiler, identifier, 1);
 	free(identifier.data);
 }
 
@@ -134,7 +142,6 @@ ssize_t global_function_typedef_id = 0;
 
 void comp_FunctionType(FunctionType* self, str* line,
 		Compiler* compiler) {
-
 	if(!self->typedef_id) {
 		const ssize_t typedef_id = ++global_function_typedef_id;
 		self->typedef_id = -1;

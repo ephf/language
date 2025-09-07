@@ -48,6 +48,7 @@ void insert_std_numerics(Scope* std_scope) {
 
 	create_std_type(std_scope, str("void"), str("void"));
 	create_std_type(std_scope, str("bool"), str("bool"));
+	create_std_type(std_scope, str("File"), str("FILE"));
 }
 
 FunctionDeclaration* entry_declaration() {
@@ -110,7 +111,10 @@ int main(int argc, char** argv) {
 			input_content, &messages);
 	Parser parser = { &tokenizer };
 	Compiler compiler = { .messages = &messages };
+
 	push(&compiler.sections, (CompilerSection) { 0 });
+	push(&compiler.sections.data[0].lines, str("#include <stdint.h>"));
+	push(&compiler.sections.data[0].lines, str("#include <stdio.h>"));
 
 	push(&parser.stack, new_scope(0));
 	insert_std_numerics(parser.stack.data[0]);
@@ -126,11 +130,18 @@ int main(int argc, char** argv) {
 	for(size_t i = 0; i < messages.size; i++)
 		print_message(messages.data[i]);
 
+	FILE* out = fopen(output_file, "w+");
+	if(!out) {
+		perror("open");
+		panicf("unable to output file '%s' to write\n",
+				output_file);
+	}
+
 	for(size_t i = 0; i < compiler.sections.size; i++) {
-		puts("");
+		if(i) fprintf(out, "\n");
 		for(size_t j = 0; j < compiler.sections.data[i].lines.size;
 				j++) {
-			printf("] %.*s\n",
+			fprintf(out, "%.*s\n",
 					(int) compiler.sections.data[i].lines.data[j].size,
 					compiler.sections.data[i].lines.data[j].data);
 		}

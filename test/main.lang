@@ -1,5 +1,3 @@
-T echo<T>(T value) {
-	return value;
-}
+usize extern printf((const char)* fmt);
 
-i32* x = echo<typeof(echo(15))*>(auto y);
+printf("Hello World\n");

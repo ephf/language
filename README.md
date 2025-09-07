@@ -16,6 +16,14 @@ $ make
 
 ## Features
 
+### Hello World
+
+```
+usize extern printf((const char)* fmt);
+
+printf("Hello World\n");
+```
+
 ### Command structure
 
 ```sh

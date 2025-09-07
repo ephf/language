@@ -61,6 +61,29 @@ Node* left(Parser* parser) {
 				return (void*) type;
 			}
 
+			if(streq(token.trace.slice, str("extern"))) {
+				expect(parser->tokenizer, '<');
+				Type* type = (void*) expression(parser);
+				if(!(type->flags & fType)) type = type->type;
+				expect(parser->tokenizer, '>');
+
+				Token external_token =
+					expect(parser->tokenizer, TokenString);
+				Trace trace = stretch(token.trace,
+						external_token.trace);
+				str data = external_token.trace.slice;
+				data.data++;
+				data.size -= 2;
+
+				return new_node((Node) { .External = {
+						.compiler = (void*) &comp_External,
+						.flags = fConstExpr,
+						.trace = trace,
+						.type = type,
+						.data = data,
+				}});
+			}
+
 			IdentifierInfo info = new_identifier(token, parser);
 			unbox((void*) info.identifier);
 
@@ -77,6 +100,17 @@ Node* left(Parser* parser) {
 			expect(parser->tokenizer, ')');
 			return expression;
 		}
+
+		case TokenString:
+			return new_node((Node) { .External = {
+					.compiler = (void*) &comp_External,
+					.trace = token.trace,
+					.type = new_type((Type) { .Auto = {
+							.compiler = (void*) &comp_Auto,
+							.trace = token.trace,
+					}}),
+					.data = token.trace.slice,
+			}});		
 	}
 
 	push(parser->tokenizer->messages, Err(token.trace,

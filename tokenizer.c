@@ -3,6 +3,7 @@
 enum {
 	TokenIdentifier = 'a',
 	TokenNumber,
+	TokenString,
 };
 
 typedef struct {
@@ -47,6 +48,15 @@ Token create_token(Trace trace) {
 					"09"));
 		trace.col += trace.slice.size;
 		return (Token) { trace, TokenNumber };
+	}
+
+	if(*trace.slice.data == '"') {
+		while(trace.slice.data[++trace.slice.size] != '"') {
+			if(trace.slice.data[trace.slice.size] == '\\')
+				trace.slice.size++;
+		}
+		trace.col += ++trace.slice.size;
+		return (Token) { trace, TokenString };
 	}
 
 	trace.col += trace.slice.size = 1;
