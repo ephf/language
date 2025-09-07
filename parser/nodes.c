@@ -154,8 +154,7 @@ typedef struct {
 void comp_GenericType(GenericType*, str*, Compiler*);
 
 typedef struct {
-	extends_Type;
-	Identifier* identifier;
+	extends_Declaration;
 	VariableDeclarationList fields;
 	Scope* body;
 	unsigned compiled_declaration : 1;
@@ -176,6 +175,7 @@ union Type {
 	External External;
 	Variable Variable;
 	GenericType GenericType;
+	Missing Missing;
 
 	FunctionType FunctionType;
 	PointerType PointerType;

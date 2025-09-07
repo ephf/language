@@ -88,10 +88,73 @@ Node* left(Parser* parser) {
 			unbox((void*) info.identifier);
 
 			if(!info.value) return (void*) new_type((Type) {
-					.compiler = (void*) &comp_Missing,
-					.trace = token.trace,
+					.Missing = {
+						.compiler = (void*) &comp_Missing,
+						.trace = token.trace,
+					}
 			});
 
+			if(try(parser->tokenizer, '{', 0)) {
+				const OpenedType opened = open_type((void*) info.value);
+				StructType* const struct_type =
+					(void*) opened.open_type;
+
+				// TODO: error message if not struct
+				if(struct_type->compiler != (void*) comp_StructType) {
+					close_type(opened.actions);
+					goto ret;
+				}
+
+				StructLiteral* struct_literal = (void*) new_node(
+						(Node) { .StructLiteral = {
+							.compiler = (void*) &comp_structLiteral,
+							.type = (void*) info.value,
+						}});
+
+				while(parser->tokenizer->current.type
+						&& parser->tokenizer->current.type != '}') {
+					Node* field_value = expression(parser);
+					str field_name = { 0 };
+
+					if(try(parser->tokenizer, ':', 0)) {
+						Trace field_name_trace = field_value->trace;
+						field_name = field_value->trace.slice;
+						unbox(field_value);
+						field_value = expression(parser);
+
+						for(size_t i = 0; i < struct_type->fields.size;
+								i++) {
+							if(streq(field_name, struct_type->fields
+										.data[i]->identifier->base))
+								goto found_field;
+						}
+
+						push(parser->tokenizer->messages, Err(
+									field_name_trace,
+									strf(0, "no field named "
+										"'\33[35m%.*s\33[0m' on "
+										"struct '\33[35m%.*s\33[0m'",
+										(int) field_name_trace
+											.slice.size,
+										field_name_trace.slice.data,
+										(int) info.trace.slice.size,
+										info.trace.slice.data)));
+						push(parser->tokenizer->messages,
+								see_declaration((void*) struct_type,
+									(void*) info.value));
+
+					}
+found_field:
+					push(&struct_literal->field_names, field_name);
+					push(&struct_literal->fields, field_value);
+				}
+				struct_literal->trace = stretch(info.trace,
+						expect(parser->tokenizer, '}').trace);
+				close_type(opened.actions);
+				return (void*) struct_literal;
+			}
+
+ret:
 			return (void*) info.value;
 		}
 

@@ -11,6 +11,7 @@ enum {
 	RightDeclaration,
 	RightAssignment,
 	RightCall,
+	RightFieldAccess,
 };
 
 typedef struct {
@@ -19,6 +20,7 @@ typedef struct {
 } RightOperator;
 
 RightOperator right_operator_table[128] = {
+	['.'] = { 1, RightFieldAccess },
 	['('] = { 1, RightCall },
 	['*'] = { 3, RightAltBinary }, ['/'] = { 3 }, ['%'] = { 3 },
 	['+'] = { 4 }, ['-'] = { 4 },
@@ -293,6 +295,70 @@ outer_while:
 						.function = lefthand,
 						.arguments = arguments,
 				}});
+			}
+
+			case RightFieldAccess: {
+				const OpenedType opened = open_type(
+						(void*) lefthand->type);
+				StructType* const struct_type = 
+					(void*) opened.open_type;
+
+				str operator_token =
+					next(parser->tokenizer).trace.slice;
+				Token field_token = expect(parser->tokenizer,
+						TokenIdentifier);
+
+				// TODO: error message if not struct
+				if(struct_type->compiler != (void*) &comp_StructType) {
+					return lefthand;
+				}
+
+				ssize_t found_index = -1;
+				for(size_t i = 0; i < struct_type->fields.size; i++) {
+					if(streq(field_token.trace.slice,
+								struct_type->fields.data[i]
+								->identifier->base)) {
+						found_index = i;
+					}
+				}
+
+				if(found_index < 0) {
+					push(parser->tokenizer->messages, Err(
+								field_token.trace, strf(0,
+									"no field named "
+									"'\33[35m%.*s\33[0m' on struct "
+									"'\33[35m%.*s\33[0m'",
+									(int) field_token.trace.slice.size,
+									field_token.trace.slice.data,
+									(int) lefthand->trace.slice.size,
+									lefthand->trace.slice.data)));
+					push(parser->tokenizer->messages,
+							see_declaration((void*) struct_type,
+								lefthand));
+					break;
+				}
+
+				Type* field_type = struct_type->fields
+					.data[found_index]->type;
+				int ignore;
+				make_type_standalone(&field_type, field_type,
+						&ignore);
+				close_type(opened.actions);
+
+				lefthand = new_node((Node) { .BinaryOperation = {
+						.compiler = (void*) &comp_BinaryOperation,
+						.flags = fMutable,
+						.trace = stretch(lefthand->trace,
+								field_token.trace),
+						.type = field_type,
+						.left = lefthand,
+						.operator = operator_token,
+						.right = new_node((Node) { .External = {
+								.compiler = (void*) &comp_External,
+								.data = field_token.trace.slice,
+						}}),
+				}});
+				break;
 			}
 		}
 	}

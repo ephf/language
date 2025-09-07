@@ -127,8 +127,12 @@ int main(int argc, char** argv) {
 	str temp_line = { 0 };
 	entry->compiler((void*) entry, &temp_line, &compiler);
 
-	for(size_t i = 0; i < messages.size; i++)
-		print_message(messages.data[i]);
+	int error = 0;
+	for(size_t i = 0; i < messages.size; i++) {
+		if(print_message(messages.data[i])) error = 1;
+	}
+
+	if(error) return 1;
 
 	FILE* out = fopen(output_file, "w+");
 	if(!out) {

@@ -76,6 +76,9 @@ Node* statement(Parser* parser) {
 
 			expect(parser->tokenizer, '{');
 
+			// TODO: change expression() to a general collect_until
+			// and sift through the declarations (current system
+			// does not work for non-field values)
 			Node* possible_field = 0;
 			while(parser->tokenizer->current.type &&
 					parser->tokenizer->current.type != '}' &&
@@ -91,6 +94,7 @@ Node* statement(Parser* parser) {
 			if(!try(parser->tokenizer, '}', 0)) {
 				NodeList declarations = collect_until(parser,
 						&statement, 0, '}');
+				push(&declarations, possible_field);
 				type->body->children = declarations;
 			}
 

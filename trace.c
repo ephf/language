@@ -52,13 +52,13 @@ Trace stretch(Trace a, Trace b) {
 #define Warn(trace, content) \
 	((Message) { trace, "\33[33m", "warning", content })
 
-void print_message(Message message) {
+int print_message(Message message) {
 	if(!message.trace.filename) {
 		printf("\33[1m%s%s:\33[0m %.*s\n",
 				message.highlight, message.label,
 				(int) message.content.size,
 				message.content.data);
-		return;
+		return 0;
 	}
 
 	char underline[message.trace.slice.data - message.trace.line_start
@@ -77,4 +77,6 @@ void print_message(Message message) {
 			message.trace.row, message.trace.line_start,
 			message.highlight,
 			(int) sizeof(underline), underline);
+
+	return message.highlight[3] == '1';
 }
