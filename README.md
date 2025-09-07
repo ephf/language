@@ -86,32 +86,28 @@ int32_t add(int32_t a, int32_t b) {
 Here is an example of the compiler's ability to keep track of type relations:
 
 ```
-void test<T>(T a) {
+T echo<T>(T value) {
+	return value;
 }
 
-auto x;
-auto y;
-
-test<typeof(x)>(y);
-
-i32 z;
-y = z;
+i32* x = echo<typeof(echo(15))*>(auto y);
 ```
 
 ```c
 int main() {
-    int32_t x;
-    int32_t y;
-    int32_t z;
-    test(y);
-    (y = z);
+    int32_t* x;
+    int32_t* y;
+    (x = echo(y));
 }
 
-void test(int32_t a) {
+int32_t echo__int32_t(int32_t value) {
+    return value;
+}
+
+int32_t* echo__int32_t_ptr(int32_t* value) {
+    return value;
 }
 ```
-
-> Note generics are not fully finished and will result in overlapping function definitions.
 
 ## Ending / Notes
 

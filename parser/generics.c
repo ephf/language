@@ -6,6 +6,19 @@ NodeList collect_until(Parser* parser, Node* (*supplier)(Parser*),
 Node* expression(Parser* parser);
 Message see_declaration(Declaration* declaration, Node* node);
 void clash_types(Type* a, Type* b, Trace trace, Messages* messages);
+void stringify_type(Type* type, str* string, unsigned flags);
+
+Type* wrap_applied_generics(Type* type, TypeList generics,
+		Declaration* declaration) {
+	return new_type((Type) { .Auto = {
+			.compiler = (void*) &comp_Auto,
+			.trace = type->trace,
+			.flags = type->flags,
+			.generics = generics,
+			.generics_declaration = declaration,
+			.ref = type,
+	}});
+}
 
 void assign_generics(Variable* variable, Parser* parser) {
 	Declaration* const declaration = variable->declaration;
@@ -46,14 +59,8 @@ void assign_generics(Variable* variable, Parser* parser) {
 	}
 
 	variable->generics = input_generics;
-	variable->type = new_type((Type) { .Auto = {
-			.compiler = (void*) &comp_Auto,
-			.trace = variable->type->trace,
-			.flags = variable->type->flags,
-			.ref = variable->type,
-			.generics = input_generics,
-			.generics_declaration = declaration,
-	}});
+	variable->type = wrap_applied_generics(variable->type,
+			input_generics, declaration);
 	push(&declaration->generics.variants, input_generics);
 }
 
@@ -118,4 +125,39 @@ void apply_generics(Declaration* declaration,
 	for(size_t i = 0; i < collection.declaration_setters.size; i++) {
 		*collection.declaration_setters.data[i] = declaration;
 	}
+}
+
+void append_generics_identifier(str* string, TypeList generics) {
+	if(!generics.size) return;
+	
+	for(size_t i = 0; i < generics.size; i++) {
+		strf(string, "__");
+		stringify_type(generics.data[i], string, 1 << 0);
+	}
+}
+
+strs filter_unique_generics_variants(TypeLists variants, str base) {
+	strs identifiers = { 0 };
+	Scope variants_set = { 0 };
+	init_scope(&variants_set);
+
+	for(size_t i = 0; i < variants.size; i++) {
+		str identifier = strf(0, "%.*s", (int) base.size, base.data);
+		append_generics_identifier(&identifier, variants.data[i]);
+
+		if(get(variants_set, (Trace) { .slice = identifier })) {
+			variants.data[i].size = 0;
+		} else {
+			put(&variants_set, identifier, 0);
+		}
+
+		push(&identifiers, identifier);
+	}
+
+	for(size_t i = 0; i < variants_set.cap; i++) {
+		free(variants_set.data[i].data);
+	}
+	free(variants_set.data);
+
+	return identifiers;
 }

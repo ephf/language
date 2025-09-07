@@ -12,14 +12,17 @@ uint32_t fnv1a_u32_hash(str string) {
 	return hash;
 }
 
+void init_scope(Scope* scope) {
+	resv(scope, 16);
+	memset(scope->data, 0, sizeof(ScopeEntries) * 16);
+}
+
 Scope* new_scope(Declaration* parent) {
 	Scope scope = {
 		.compiler = (void*) &comp_Scope,
 		.parent = parent,
 	};
-	
-	resv(&scope, 16);
-	memset(scope.data, 0, sizeof(ScopeEntries) * 16);
+	init_scope(&scope);
 
 	Scope* boxed_scope = (void*) new_node((Node) { .Scope = scope });
 	if(!boxed_scope->parent) boxed_scope->parent = (void*) boxed_scope;
@@ -34,6 +37,7 @@ void put(Scope* scope, str identifier, Declaration* declaration) {
 
 Variable* variable_of(Declaration* declaration, Trace trace,
 		unsigned long flags) {
+	if(!declaration) return (void*) 1;
 	flags |= fConstExpr | fMutable | declaration->flags & fType;
 
 	return (void*) new_node((Node) { .Variable = {

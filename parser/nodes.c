@@ -38,7 +38,6 @@ typedef Vector(Scope*) Stack;
 void comp_Scope(Scope*, str*, Compiler*);
 
 typedef struct {
-	Scope* variant_set;
 	TypeLists variants;
 	TypeLists stack;
 } Generics;
@@ -47,7 +46,8 @@ typedef struct {
 	extends_Node; \
 	Identifier* identifier; \
 	Node* const_value; \
-	Generics generics;
+	Generics generics; \
+	unsigned is_inline : 1
 
 typedef struct {
 	extends_Node;
@@ -60,6 +60,7 @@ typedef struct {
 	Type* ref;
 	TypeList generics;
 	Declaration* generics_declaration;
+	unsigned warned : 1;
 } Auto;
 void comp_Auto(Auto*, str*, Compiler*);
 
@@ -73,8 +74,6 @@ void comp_Identifier(Identifier*, str*, Compiler*);
 
 typedef struct {
 	extends_Declaration;
-	unsigned is_inline : 1,
-			 inline_compiled : 1;
 } VariableDeclaration;
 typedef Vector(VariableDeclaration*) VariableDeclarationList;
 void comp_VariableDeclaration(VariableDeclaration*, str*, Compiler*);

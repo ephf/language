@@ -10,6 +10,13 @@ void comp_Auto(Auto* self, str* line, Compiler* compiler) {
 	
 	if(opened.open_type->compiler == (void*) &comp_Auto) {
 		strf(line, "/* auto */ int");
+
+		if(!self->warned) {
+			self->warned = 1;
+			push(compiler->messages, Warn(self->trace,
+						str("auto was never assigned a type (defaults "
+							"to '\33[35mint\33[0m')")));
+		}
 	} else {
 		opened.open_type->compiler((void*) opened.open_type, line,
 				compiler);
@@ -28,6 +35,7 @@ void comp_Scope(Scope* self, str* line, Compiler* compiler) {
 	strf(&section->indent, "    ");
 
 	for(size_t i = 0; i < self->declarations.size; i++) {
+		if(self->declarations.data[i]->is_inline) continue;
 		self->declarations.data[i]->compiler(
 				(void*) self->declarations.data[i], line, compiler);
 	}

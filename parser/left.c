@@ -87,9 +87,9 @@ Node* left(Parser* parser) {
 	return new_node((Node) {
 			.compiler = (void*) &comp_NumericLiteral,
 			.trace = token.trace,
-			.type = new_type((Type) {
+			.type = new_type((Type) { .Auto = {
 					.compiler = (void*) &comp_Auto,
 					.trace = token.trace,
-			}),
+			}}),
 	});
 }

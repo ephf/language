@@ -30,6 +30,23 @@ Node* expression(Parser* parser) {
 	return right(left(parser), parser, 15);
 }
 
+int filter_missing(Type* type) {
+	return type->compiler == (void*) &comp_Missing;
+}
+
+TypeList recycle_missing_generics;
+Declaration* recycle_missing_declaration;
+
+void recycle_missing(Type* missing, Parser* parser) {
+	Variable* possible_found = find(parser->stack, missing->trace);
+
+	if(possible_found && possible_found->flags & fType) {
+		*missing = *(Type*)(void*) possible_found;
+	}
+
+	unbox((void*) possible_found);
+}
+
 Variable* declaration(Node* type, Token identifier, Parser* parser) {
 	// TODO: insert scope before calling info to catch generic
 	// type declarations
@@ -66,7 +83,13 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 		});
 		declaration->body = new_scope((void*) declaration);
 		function_type->declaration = declaration;
+
 		apply_generics((void*) declaration, info.generics_collection);
+		recycle_missing_generics =
+			info.generics_collection.base_generics;
+		recycle_missing_declaration = (void*) declaration;
+		sift_type((void*) type, &filter_missing,
+				(void*) &recycle_missing, parser, SiftGenerics);
 
 		push(&parser->stack, declaration->body);
 		push(&info.scope->declarations, (void*) declaration);
@@ -77,13 +100,9 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 
 		for(size_t i = 0; i < argument_declarations.size; i++) {
 			if(argument_declarations.data[i]->compiler
-					!= (void*) &comp_Variable
+					== (void*) &comp_Variable
 					&& argument_declarations.data[i]->flags
 						& fIgnoreStatment) {
-				push(parser->tokenizer->messages, Err(
-							argument_declarations.data[i]->trace,
-							str("expected an argument declaration")));
-			} else {
 				push(&function_type->signature,
 						argument_declarations.data[i]->type);
 				VariableDeclaration* argument =
@@ -91,6 +110,10 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 						.declaration;
 				argument->is_inline = 1;
 				push(&declaration->arguments, argument);
+			} else {
+				push(parser->tokenizer->messages, Err(
+							argument_declarations.data[i]->trace,
+							str("expected an argument declaration")));
 			}
 		}
 		free(argument_declarations.data);
@@ -169,6 +192,7 @@ outer_while:
 				Token operator_token = next(parser->tokenizer);
 				Node* righthand = right(left(parser), parser,
 						operator.precedence);
+
 				clash_types(lefthand->type, righthand->type,
 						stretch(lefthand->trace, righthand->trace),
 						parser->tokenizer->messages);
@@ -257,7 +281,11 @@ outer_while:
 								lefthand));
 				}
 				
+				int ignore;
+				make_type_standalone(&return_type, return_type,
+						&ignore);
 				close_type(opened_function_type.actions);
+
 				return new_node((Node) { .FunctionCall = {
 						.compiler = (void*) &comp_FunctionCall,
 						.type = return_type,

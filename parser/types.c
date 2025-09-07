@@ -77,7 +77,7 @@ void close_type(TypeStateActions actions) {
 }
 
 enum {
-	StringifyAlphaNum,
+	StringifyAlphaNum = 1 << 0,
 };
 
 void stringify_type(Type* type, str* string, unsigned flags) {
@@ -85,7 +85,10 @@ void stringify_type(Type* type, str* string, unsigned flags) {
 	Type* const open = opened_type.open_type;
 
 	if(open->compiler == (void*) &comp_Auto) {
-		strf(string, "auto");
+		if(open->flags & tfNumeric) {
+			if(flags & StringifyAlphaNum) strf(string, "number");
+			else strf(string, "~number");
+		} else strf(string, "auto");
 	}
 
 	else if(open->compiler == (void*) &comp_External) {
@@ -101,7 +104,7 @@ void stringify_type(Type* type, str* string, unsigned flags) {
 	}
 
 	else {
-		strf(string, "[unknown]");
+		strf(string, "~unknown");
 	}
 
 	close_type(opened_type.actions);
@@ -116,40 +119,91 @@ Type* clone_base_type(Type* type) {
 	return cloned;
 }
 
-Type* make_type_standalone(Type* type) {
-	// TODO: traverse_type() function that traverses a types children
-	// (e.g. traversing pointers, function arguments, and generics)
+void make_type_standalone(Type** type, Type* open,
+		int* applied_actions) {
 	TypeStateActions actions = { 0 };
-	Type* open;
 
-	while((open = open_type_interm(type, &actions,
+	while((open = open_type_interm(open, &actions,
 					(void*) &comp_GenericType))
 			->compiler == (void*) &comp_GenericType) {
 		Declaration* declaration = open->GenericType.declaration;
 
 		for(size_t i = declaration->generics.stack.size; i > 1; i--) {
-			type = new_type((Type) { .Auto = {
-					.compiler = (void*) &comp_Auto,
-					.trace = type->trace,
-					.flags = type->flags,
-					.generics = declaration->generics
-						.stack.data[i - 1],
-					.generics_declaration = declaration,
-					.ref = type,
-			}});
+			*type = wrap_applied_generics(*type,
+					declaration->generics.stack.data[i - 1],
+					declaration);
+			(*applied_actions)++;
 		}
+
+		open = last(open->GenericType.declaration->generics.stack)
+				.data[open->GenericType.index];
+	}
+
+	if(open->compiler == (void*) &comp_PointerType) {
+		make_type_standalone(type, open->PointerType.base,
+				applied_actions);
+		close_type(actions);
+		return;
+	}
+
+	if(open->compiler == (void*) &comp_FunctionType) {
+		Generics* const generics =
+			&open->FunctionType.declaration->generics;
+		*type = wrap_applied_generics(*type, last(generics->stack),
+				(void*) open->FunctionType.declaration);
+		close_type(actions);
+		return;
 	}
 
 	close_type(actions);
-	return type;
+}
+
+enum {
+	SiftGenerics = 1 << 0,
+};
+
+int sift_type(Type* type, int (*filter)(Type*),
+		void (*acceptor)(Type*, void*), void* accumulator,
+		unsigned flags) {
+	const OpenedType opened = open_type(type);
+	Type* const open = opened.open_type;
+
+	if(!filter || filter(open)) {
+		if(acceptor) acceptor(open, accumulator);
+		return 1;
+	}
+
+	if(open->compiler == (void*) &comp_PointerType) {
+		int result = sift_type(open->PointerType.base, filter,
+				acceptor, accumulator, flags);
+		close_type(opened.actions);
+		return result;
+	}
+
+	close_type(opened.actions);
+	return 0;
+}
+
+Type* exact_type_filter_compare;
+int exact_type_filter(Type* type) {
+	return type == exact_type_filter_compare;
 }
 
 int try_assign_auto_type(Type* open_a, Type* open_b) {
 	if(open_a->compiler == (void*) &comp_Auto) {
 		if(open_a == open_b) return 1;
+
+		exact_type_filter_compare = open_b;
+		if(sift_type(open_a, &exact_type_filter, 0, 0, 0)) return -1;
+		exact_type_filter_compare = open_a;
+		if(sift_type(open_b, &exact_type_filter, 0, 0, 0)) return -1;
+
 		if(open_a->flags & tfNumeric && !(open_b->flags & tfNumeric))
 			return 0;
-		open_a->Auto.ref = make_type_standalone(open_b);
+
+		int ignore;
+		open_a->Auto.ref = open_b;
+		make_type_standalone(&open_a->Auto.ref, open_b, &ignore);
 		return 1;
 	}
 
@@ -171,7 +225,7 @@ int test_types(Type* a, Type* b, Trace trace, Messages* messages) {
 		}
 
 		const int test_result = test_types(
-				a->PointerType.base, b->PointerType.base,
+				open_a->PointerType.base, open_b->PointerType.base,
 				trace, messages);
 		close_type(opened_a.actions);
 		close_type(opened_b.actions);
@@ -180,13 +234,19 @@ int test_types(Type* a, Type* b, Trace trace, Messages* messages) {
 		goto partial_checks;
 	}
 
+
+	int result;
+	if((result = try_assign_auto_type(open_b, open_a))
+			|| (result = try_assign_auto_type(open_a, open_b))) {
+		close_type(opened_a.actions);
+		close_type(opened_b.actions);
+		return result;
+	}
+
 	close_type(opened_a.actions);
 	close_type(opened_b.actions);
 
-	if(try_assign_auto_type(open_b, open_a)
-			|| try_assign_auto_type(open_a, open_b)) return 1;
-
-	else if(open_a->type == (void*) &comp_External) {
+	if(open_a->type == (void*) &comp_External) {
 		if(open_b->type != (void*) &comp_External
 				|| !streq(open_a->External.data,
 					open_b->External.data))
@@ -200,15 +260,21 @@ partial_checks:
 }
 
 void clash_types(Type* a, Type* b, Trace trace, Messages* messages) {
-	if(!test_types(a, b, trace, messages)) {
+	int result = test_types(a, b, trace, messages);
+	if(result <= 0) {
 		str string_a = { 0 }, string_b = { 0 };
 		stringify_type(a, &string_a, 0);
 		stringify_type(b, &string_b, 0);
 
-		push(messages, Err(trace,
-					strf(0, "type mismatch between "
-						"'\33[35m%.*s\33[0m' and '\33[35m%.*s\33[0m'",
-						(int) string_a.size, string_a.data,
-						(int) string_b.size, string_b.data)));
+		str message = strf(0, "type mismatch between "
+				"'\33[35m%.*s\33[0m' and '\33[35m%.*s\33[0m'",
+				(int) string_a.size, string_a.data,
+				(int) string_b.size, string_b.data);
+		if(result == -1) {
+			strf(&message, " (types are circularly referencing "
+					"eachother)");
+		}
+
+		push(messages, Err(trace, message));
 	}
 }

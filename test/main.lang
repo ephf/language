@@ -1,10 +1,5 @@
-void test<T>(T a) {
+T echo<T>(T value) {
+	return value;
 }
 
-auto x;
-auto y;
-
-test<typeof(x)>(y);
-
-i32 z;
-y = z;
+i32* x = echo<typeof(echo(15))*>(auto y);
