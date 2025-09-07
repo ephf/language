@@ -1,3 +1,6 @@
-usize extern printf((const char)* fmt);
+struct Test {
+	i32 data;
+}
 
-printf("Hello World\n");
+Test x;
+Test y;

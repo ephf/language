@@ -18,3 +18,42 @@ void comp_ReturnStatement(ReturnStatement* self, str* line,
 	push(&compiler->sections.data[compiler->open_section].lines,
 			strf(&statement_line, ";"));
 }
+
+void comp_StructType(StructType* self, str* line, Compiler* compiler) {
+	strf(line, "struct ");
+	self->identifier->compiler((void*) self->identifier, line,
+			compiler);
+
+	if(!self->compiled_declaration) {
+		self->compiled_declaration = 1;
+
+		strf(line, " { ");
+		for(size_t i = 0; i < self->fields.size; i++) {
+			self->fields.data[i]->compiler((void*) self->fields.data[i],
+					line, compiler);
+			strf(line, "; ");
+		}
+		strf(line, "}");
+	}
+}
+
+void comp_structLiteral(StructLiteral* self, str* line,
+		Compiler* compiler) {
+	strf(line, "(");
+	self->type->compiler((void*) self->type, line, compiler);
+	strf(line, ") {");
+
+	for(size_t i = 0; i < self->fields.size; i++) {
+		strf(line, i ? ", " : " ");
+		
+		if(self->field_names.data[i].size) {
+			strf(line, ".%.*s = ",
+					(int) self->field_names.data[i].size,
+					self->field_names.data[i].data);
+		}
+
+		self->fields.data[i]->compiler(self->fields.data[i], line,
+				compiler);
+	}
+	strf(line, " }");
+}

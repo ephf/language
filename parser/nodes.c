@@ -153,6 +153,22 @@ typedef struct {
 } GenericType;
 void comp_GenericType(GenericType*, str*, Compiler*);
 
+typedef struct {
+	extends_Type;
+	Identifier* identifier;
+	VariableDeclarationList fields;
+	Scope* body;
+	unsigned compiled_declaration : 1;
+} StructType;
+void comp_StructType(StructType*, str*, Compiler*);
+
+typedef struct {
+	extends_Node;
+	NodeList fields;
+	strs field_names;
+} StructLiteral;
+void comp_structLiteral(StructLiteral*, str*, Compiler*);
+
 union Type {
 	struct { extends_Type; };
 
@@ -163,6 +179,8 @@ union Type {
 
 	FunctionType FunctionType;
 	PointerType PointerType;
+
+	StructType StructType;
 };
 
 union Declaration {
@@ -193,6 +211,7 @@ union Node {
 
 	Statement Statement;
 	ReturnStatement ReturnStatement;
+	StructLiteral StructLiteral;
 };
 
 void comp_Ignore(Node* self, str* line, Compiler* compiler) {}

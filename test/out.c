@@ -3,6 +3,7 @@
 int main();
 
 int main() {
-    printf("Hello World\n");
+    struct Test { int32_t data; } x;
+    struct Test y;
 }
 

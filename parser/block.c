@@ -40,14 +40,62 @@ Node* statement(Parser* parser) {
 					.value = value,
 			}});
 		}
-	}
 
-	if(try(parser->tokenizer, '{', 0)) {
-		Scope* block = new_scope(last(parser->stack)->parent);
-		push(&parser->stack, block);
-		block->children = collect_until(parser, &statement, 0, '}');
-		parser->stack.size--;
-		return (void*) block;
+		if(streq(parser->tokenizer->current.trace.slice,
+					str("struct"))) {
+			Trace trace_start = next(parser->tokenizer).trace;
+			IdentifierInfo info = new_identifier(
+					expect(parser->tokenizer, TokenIdentifier),
+					parser);
+
+			StructType* type = (void*) new_type((Type) {
+					.StructType = {
+						.compiler = (void*) &comp_StructType,
+						.flags = fConstExpr,
+						.trace = stretch(trace_start, info.trace),
+						.identifier = info.identifier,
+					}
+			});
+			type->body = new_scope((void*) type);
+			// TODO: create a flag that only allows type to compile
+			// if it is pointed to (in reference())
+			// this will prevent circular types and allow structs
+			// to reference themselves within themselves
+
+			Declaration* declaration = (void*) new_node((Node) {
+					.VariableDeclaration = {
+						.compiler = (void*) &comp_VariableDeclaration,
+						.flags = fConst | fType,
+						.trace = type->trace,
+						.type = (void*) type,
+						.const_value = (void*) type,
+						.identifier = info.identifier,
+					}
+			});
+			put(info.scope, info.identifier->base, declaration);
+
+			expect(parser->tokenizer, '{');
+
+			Node* possible_field = 0;
+			while(parser->tokenizer->current.type &&
+					parser->tokenizer->current.type != '}' &&
+					(possible_field = expression(parser))
+						->compiler == (void*) &comp_Variable &&
+					possible_field->flags & fIgnoreStatment) {
+				possible_field->Variable.declaration->is_inline = 1;
+				push(&type->fields,
+						(void*) possible_field->Variable.declaration);
+				expect(parser->tokenizer, ';');
+			}
+
+			if(!try(parser->tokenizer, '}', 0)) {
+				NodeList declarations = collect_until(parser,
+						&statement, 0, '}');
+				type->body->children = declarations;
+			}
+
+			return new_node((Node) { .compiler = &comp_Ignore });
+		}
 	}
 
 	Node* expr = expression(parser);
@@ -55,7 +103,7 @@ Node* statement(Parser* parser) {
 		expect(parser->tokenizer, ';');
 
 	if(expr->flags & fIgnoreStatment) return new_node((Node) {
-			.compiler = (void*) &comp_Ignore,
+			.compiler = &comp_Ignore,
 	});
 
 	return new_node((Node) { .Statement = {
