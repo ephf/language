@@ -103,6 +103,13 @@ void stringify_type(Type* type, str* string, unsigned flags) {
 		else strf(string, "*");
 	}
 
+	else if(open->compiler == (void*) &comp_StructType) {
+		strf(string, flags & StringifyAlphaNum
+				? "struct_%.*s" : "struct %.*s",
+				(int) open->StructType.identifier->base.size,
+				open->StructType.identifier->base.data);
+	}
+
 	else {
 		strf(string, "~unknown");
 	}

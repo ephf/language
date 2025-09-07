@@ -2,5 +2,6 @@ struct Test {
 	i32 data;
 }
 
-Test x;
-Test y;
+T undefined<T>() {}
+
+Test x = undefined();

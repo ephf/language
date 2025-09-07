@@ -100,9 +100,9 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 			push(&self->generics.stack,
 					self->generics.variants.data[i]);
 			dual_function_compiler(self, compiler, identifiers.data[i],
-					0);
-			dual_function_compiler(self, compiler, identifiers.data[i],
 					1);
+			dual_function_compiler(self, compiler, identifiers.data[i],
+					0);
 			self->generics.stack.size--;
 		}
 
@@ -113,8 +113,8 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 	str identifier = { 0 };
 	self->identifier->compiler((void*) self->identifier, &identifier,
 			compiler);
-	dual_function_compiler(self, compiler, identifier, 0);
 	dual_function_compiler(self, compiler, identifier, 1);
+	dual_function_compiler(self, compiler, identifier, 0);
 	free(identifier.data);
 }
 
