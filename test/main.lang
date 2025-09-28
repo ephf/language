@@ -1,6 +1,5 @@
-struct Test {
-	i32 data;
-}
+void inner<T>() {}
+void outer<K>() { inner<K>(); }
 
-auto x = Test { data: 4 };
-auto y = x.data;
+outer<i32>();
+outer<u32>();

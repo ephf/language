@@ -32,12 +32,9 @@ Node* expression(Parser* parser) {
 	return right(left(parser), parser, 15);
 }
 
-int filter_missing(Type* type) {
+int filter_missing(Type* type, void* ignore) {
 	return type->compiler == (void*) &comp_Missing;
 }
-
-TypeList recycle_missing_generics;
-Declaration* recycle_missing_declaration;
 
 void recycle_missing(Type* missing, Parser* parser) {
 	Variable* possible_found = find(parser->stack, missing->trace);
@@ -85,31 +82,25 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 		});
 		declaration->body = new_scope((void*) declaration);
 		function_type->declaration = declaration;
+		info.identifier->declaration = (void*) declaration;
 
 		apply_generics((void*) declaration, info.generics_collection);
-		recycle_missing_generics =
-			info.generics_collection.base_generics;
-		recycle_missing_declaration = (void*) declaration;
-		sift_type((void*) type, &filter_missing,
-				(void*) &recycle_missing, parser, SiftGenerics);
+		sift_type((void*) type, (void*) &recycle_missing, parser, 0);
 
 		push(&parser->stack, declaration->body);
 		push(&info.scope->declarations, (void*) declaration);
 		put(info.scope, info.identifier->base, (void*) declaration);
 
-		NodeList argument_declarations = collect_until(
-				parser, &expression, ',', ')');
+		NodeList argument_declarations = collect_until(parser, &expression, ',', ')');
 
 		for(size_t i = 0; i < argument_declarations.size; i++) {
 			if(argument_declarations.data[i]->compiler
 					== (void*) &comp_Variable
 					&& argument_declarations.data[i]->flags
 						& fIgnoreStatment) {
-				push(&function_type->signature,
-						argument_declarations.data[i]->type);
+				push(&function_type->signature, argument_declarations.data[i]->type);
 				VariableDeclaration* argument =
-					(void*) argument_declarations.data[i]->Variable
-						.declaration;
+					(void*) argument_declarations.data[i]->Variable.declaration;
 				argument->is_inline = 1;
 				push(&declaration->arguments, argument);
 			} else {
@@ -128,9 +119,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 
 		parser->stack.size--;
 		return variable_of((void*) declaration, declaration->trace,
-				fIgnoreStatment |
-				fStatementTerminated
-					* !(declaration->flags & fExternal));
+				fIgnoreStatment | fStatementTerminated * !(declaration->flags & fExternal));
 	}
 
 	VariableDeclaration* declaration =
@@ -140,6 +129,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 				.type = (void*) type,
 				.identifier = info.identifier,
 		}});
+	info.identifier->declaration = (void*) declaration;
 
 	push(&info.scope->declarations, (void*) declaration);
 	put(info.scope, info.identifier->base, (void*) declaration);
@@ -150,8 +140,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 				declaration->trace, parser->tokenizer->messages);
 	}
 
-	return variable_of((void*) declaration,
-			declaration->trace, fIgnoreStatment);
+	return variable_of((void*) declaration, declaration->trace, fIgnoreStatment);
 }
 
 Message see_declaration(Declaration* declaration, Node* node) {
@@ -226,16 +215,11 @@ outer_while:
 				TypeList signature = { 0 };
 				Type* return_type;
 
-				const OpenedType opened_function_type =
-					open_type(lefthand->type);
-				Type* const open_function_type = opened_function_type
-					.open_type;
+				const OpenedType opened_function_type = open_type(lefthand->type);
+				Type* const open_function_type = opened_function_type.open_type;
 
-
-				if(open_function_type->compiler !=
-						(void*) &comp_FunctionType) {
-					push(parser->tokenizer->messages, Err(
-								lefthand->trace,
+				if(open_function_type->compiler != (void*) &comp_FunctionType) {
+					push(parser->tokenizer->messages, Err(lefthand->trace,
 								str("calling a non-function value")));
 
 					return_type = new_type((Type) { .Auto = {
@@ -243,49 +227,36 @@ outer_while:
 							.trace = lefthand->trace,
 					}});
 				} else {
-					signature = open_function_type->FunctionType
-						.signature;
+					signature = open_function_type->FunctionType.signature;
 					return_type = signature.data[0];
 				}
 
-				NodeList arguments = collect_until(parser,
-						&expression, ',', ')');
+				NodeList arguments = collect_until(parser, &expression, ',', ')');
 				for(size_t i = 0; i < arguments.size; i++) {
 					if(i + 1 >= signature.size) {
 						push(parser->tokenizer->messages, Err(
-									stretch(
-										arguments.data[i]->trace,
+									stretch(arguments.data[i]->trace,
 										last(arguments)->trace),
-									str("too many arguments in "
-										"function call")));
+									str("too many arguments in function call")));
 						push(parser->tokenizer->messages,
-								see_declaration(
-									(void*) open_function_type
-										->FunctionType.declaration,
-									lefthand));
+								see_declaration((void*) open_function_type
+									->FunctionType.declaration, lefthand));
 						break;
 					}
 
-					clash_types(signature.data[i + 1],
-							arguments.data[i]->type,
-							arguments.data[i]->trace,
-							parser->tokenizer->messages);
+					clash_types(signature.data[i + 1], arguments.data[i]->type,
+							arguments.data[i]->trace, parser->tokenizer->messages);
 				}
 
 				if(arguments.size + 1 < signature.size) {
-					push(parser->tokenizer->messages, Err(
-								lefthand->trace,
-								str("not enough arguments in "
-									"function call")));
+					push(parser->tokenizer->messages, Err(lefthand->trace,
+								str("not enough arguments in function call")));
 					push(parser->tokenizer->messages,
-							see_declaration((void*) lefthand->type
-									->FunctionType.declaration,
+							see_declaration((void*) lefthand->type->FunctionType.declaration,
 								lefthand));
 				}
 				
-				int ignore;
-				make_type_standalone(&return_type, return_type,
-						&ignore);
+				return_type = make_type_standalone(return_type);
 				close_type(opened_function_type.actions);
 
 				return new_node((Node) { .FunctionCall = {
@@ -338,18 +309,14 @@ outer_while:
 					break;
 				}
 
-				Type* field_type = struct_type->fields
-					.data[found_index]->type;
-				int ignore;
-				make_type_standalone(&field_type, field_type,
-						&ignore);
+				Type* field_type = make_type_standalone(
+						struct_type->fields.data[found_index]->type);
 				close_type(opened.actions);
 
 				lefthand = new_node((Node) { .BinaryOperation = {
 						.compiler = (void*) &comp_BinaryOperation,
-						.flags = fMutable,
-						.trace = stretch(lefthand->trace,
-								field_token.trace),
+						.flags = fMutable | (lefthand->flags & fConstExpr),
+						.trace = stretch(lefthand->trace, field_token.trace),
 						.type = field_type,
 						.left = lefthand,
 						.operator = operator_token,

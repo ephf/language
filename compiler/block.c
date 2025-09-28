@@ -23,18 +23,6 @@ void comp_StructType(StructType* self, str* line, Compiler* compiler) {
 	strf(line, "struct ");
 	self->identifier->compiler((void*) self->identifier, line,
 			compiler);
-
-	if(!self->compiled_declaration) {
-		self->compiled_declaration = 1;
-
-		strf(line, " { ");
-		for(size_t i = 0; i < self->fields.size; i++) {
-			self->fields.data[i]->compiler((void*) self->fields.data[i],
-					line, compiler);
-			strf(line, "; ");
-		}
-		strf(line, "}");
-	}
 }
 
 void comp_structLiteral(StructLiteral* self, str* line,

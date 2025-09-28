@@ -1,7 +1,33 @@
 #include "left.c"
 
+void comp_struct_declaration(StructType* self, str* line, Compiler* compiler) {
+	str typedef_line = strf(0, "struct ");
+	self->identifier->compiler((void*) self->identifier, &typedef_line, compiler);
+
+	strf(&typedef_line, " { ");
+	for(size_t i = 0; i < self->fields.size; i++) {
+		self->fields.data[i]->compiler((void*) self->fields.data[i], &typedef_line, compiler);
+		strf(&typedef_line, "; ");
+	}
+	strf(&typedef_line, "};");
+
+	push(&compiler->sections.data[0].lines, typedef_line);
+}
+
 void comp_VariableDeclaration(VariableDeclaration* self, str* line,
 		Compiler* compiler) {
+	if(self->type->flags & fConst
+			&& self->const_value->flags & fConstExpr
+			&& !self->observed)
+		return;
+
+	if(self->const_value && self->const_value->flags & fType) {
+		const OpenedType opened = open_type((void*) self->const_value);
+		comp_struct_declaration((void*) opened.open_type, line, compiler);
+		close_type(opened.actions);
+		return;
+	}
+
 	str decl_line = new_line(compiler);
 	if(!self->is_inline) line = &decl_line;
 
@@ -38,8 +64,7 @@ void comp_BinaryOperation(BinaryOperation* self, str* line,
 	strf(line, ")");
 }
 
-void dual_function_compiler(FunctionDeclaration* self,
-		Compiler* compiler, str identifier, int hoisted) {
+void dual_function_compiler(FunctionDeclaration* self, Compiler* compiler, int hoisted) {
 	const size_t previous_section = compiler->open_section;
 	size_t section = compiler->open_section = compiler->sections.size;
 	push(&compiler->sections, (CompilerSection) { 0 });
@@ -51,8 +76,10 @@ void dual_function_compiler(FunctionDeclaration* self,
 	return_type->compiler((void*) return_type, &declaration_line,
 			compiler);
 
-	strf(&declaration_line, " %.*s(",
-			(int) identifier.size, identifier.data);
+	strf(&declaration_line, " ");
+	self->identifier->compiler((void*) self->identifier, &declaration_line, compiler);
+
+	strf(&declaration_line, "(");
 	for(size_t i = 0; i < self->arguments.size; i++) {
 		if(i) strf(&declaration_line, ", ");
 		VariableDeclaration* const argument = self->arguments.data[i];
@@ -88,38 +115,26 @@ void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
 	if(self->flags & fExternal) return;
 
 	if(self->generics.stack.size == 1) {
-		str base_identifier = { 0 };
-		self->identifier->compiler((void*) self->identifier,
-				&base_identifier, compiler);
-		strs identifiers = filter_unique_generics_variants(
-				self->generics.variants, base_identifier);
-
 		for(size_t i = 0; i < self->generics.variants.size; i++) {
 			if(!self->generics.variants.data[i].size) continue;
 
-			push(&self->generics.stack,
-					self->generics.variants.data[i]);
-			dual_function_compiler(self, compiler, identifiers.data[i],
-					1);
-			dual_function_compiler(self, compiler, identifiers.data[i],
-					0);
+			push(&self->generics.stack, self->generics.variants.data[i]);
+			dual_function_compiler(self, compiler, 1);
+			dual_function_compiler(self, compiler, 0);
 			self->generics.stack.size--;
 		}
-
-		free(base_identifier.data);
 		return;
 	}
 
 	str identifier = { 0 };
 	self->identifier->compiler((void*) self->identifier, &identifier,
 			compiler);
-	dual_function_compiler(self, compiler, identifier, 1);
-	dual_function_compiler(self, compiler, identifier, 0);
+	dual_function_compiler(self, compiler, 1);
+	dual_function_compiler(self, compiler, 0);
 	free(identifier.data);
 }
 
-void function_type_typedef(FunctionType* self, Compiler* compiler,
-		str identifier) {
+void function_type_typedef(FunctionType* self, Compiler* compiler, str identifier) {
 	str typedef_line = strf(0, "typedef ");
 	Type* const return_type = self->signature.data[0];
 	return_type->compiler((void*) return_type, &typedef_line,

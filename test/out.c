@@ -1,11 +1,28 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 int main();
+void inner__auto();
+void outer__int32_t();
+void outer__uint32_t();
 
 
 int main() {
-    struct Test { int32_t data; } x;
-    int32_t y;
-    (x = (struct Test) { .data = 4 });
-    (y = (x . data));
+    outer__int32_t();
+    outer__uint32_t();
+}
+
+
+void inner__auto() {
+}
+
+
+void outer__int32_t() {
+    inner__auto();
+}
+
+
+void outer__uint32_t() {
+    inner__auto();
 }

@@ -8,8 +8,7 @@ Message see_declaration(Declaration* declaration, Node* node);
 void clash_types(Type* a, Type* b, Trace trace, Messages* messages);
 void stringify_type(Type* type, str* string, unsigned flags);
 
-Type* wrap_applied_generics(Type* type, TypeList generics,
-		Declaration* declaration) {
+Type* wrap_applied_generics(Type* type, TypeList generics, Declaration* declaration) {
 	return new_type((Type) { .Auto = {
 			.compiler = (void*) &comp_Auto,
 			.trace = type->trace,

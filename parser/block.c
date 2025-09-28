@@ -98,6 +98,7 @@ Node* statement(Parser* parser) {
 				type->body->children = declarations;
 			}
 
+			push(&last(parser->stack)->declarations, declaration);
 			return new_node((Node) { .compiler = &comp_Ignore });
 		}
 	}

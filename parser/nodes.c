@@ -40,6 +40,7 @@ void comp_Scope(Scope*, str*, Compiler*);
 typedef struct {
 	TypeLists variants;
 	TypeLists stack;
+	DeclarationList propagate;
 } Generics;
 
 #define extends_Declaration \
@@ -68,12 +69,13 @@ typedef struct {
 	extends_Node;
 	str base;
 	Declaration* parent;
-	unsigned external : 1;
+	Declaration* declaration;
 } Identifier;
 void comp_Identifier(Identifier*, str*, Compiler*);
 
 typedef struct {
 	extends_Declaration;
+	unsigned observed : 1;
 } VariableDeclaration;
 typedef Vector(VariableDeclaration*) VariableDeclarationList;
 void comp_VariableDeclaration(VariableDeclaration*, str*, Compiler*);
@@ -100,7 +102,6 @@ typedef struct {
 	extends_Node;
 	Declaration* declaration;
 	TypeList generics;
-	unsigned observed : 1;
 } Variable;
 void comp_Variable(Variable*, str*, Compiler*);
 
@@ -261,7 +262,7 @@ Node* new_node(Node node) {
 }
 
 void unbox(Node* box) {
-	push(&global_node_unused, box);
+	if(box /* I'm not looking for where I unboxed null */) push(&global_node_unused, box);
 }
 
 Type* new_type(Type type) {

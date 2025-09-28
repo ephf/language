@@ -20,6 +20,7 @@ IdentifierInfo new_identifier(Token base_identifier, Parser* parser) {
 				.compiler = (void*) &comp_Identifier,
 				.flags = identifier_flags,
 				.base = base_identifier.trace.slice,
+				.parent = last(parser->stack)->parent,
 		}}),
 		.value = find(parser->stack, base_identifier.trace),
 		.scope = last(parser->stack),

@@ -46,6 +46,8 @@ Node* left(Parser* parser) {
 				return (void*) argument->type;
 			}
 
+			// TODO: sizeof() & fix segfault on function calls on missing values
+
 			if(streq(token.trace.slice, str("const"))) {
 				Type* type = (void*) right(left(parser), parser, 13);
 				
@@ -67,10 +69,8 @@ Node* left(Parser* parser) {
 				if(!(type->flags & fType)) type = type->type;
 				expect(parser->tokenizer, '>');
 
-				Token external_token =
-					expect(parser->tokenizer, TokenString);
-				Trace trace = stretch(token.trace,
-						external_token.trace);
+				Token external_token = expect(parser->tokenizer, TokenString);
+				Trace trace = stretch(token.trace, external_token.trace);
 				str data = external_token.trace.slice;
 				data.data++;
 				data.size -= 2;
@@ -147,6 +147,8 @@ Node* left(Parser* parser) {
 found_field:
 					push(&struct_literal->field_names, field_name);
 					push(&struct_literal->fields, field_value);
+
+					if(!try(parser->tokenizer, ',', 0)) break;
 				}
 				struct_literal->trace = stretch(info.trace,
 						expect(parser->tokenizer, '}').trace);

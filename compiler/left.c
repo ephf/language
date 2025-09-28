@@ -26,7 +26,20 @@ void comp_Auto(Auto* self, str* line, Compiler* compiler) {
 }
 
 void comp_Identifier(Identifier* self, str* line, Compiler* compiler) {
+	if(self->parent && self->parent->compiler == (void*) &comp_FunctionDeclaration
+			&& !(self->declaration && self->declaration->compiler
+				== (void*) &comp_VariableDeclaration)) {
+		Identifier* const parent_ident = self->parent->FunctionDeclaration.identifier;
+		parent_ident->compiler((void*) parent_ident, line, compiler);
+		strf(line, "__");
+	}
+
 	strf(line, "%.*s", (int) self->base.size, self->base.data);
+
+	if(self->declaration && self->declaration->generics.stack.size > 1
+			&& !(self->flags & fExternal)) {
+		append_generics_identifier(line, last(self->declaration->generics.stack));
+	}
 }
 
 void comp_Scope(Scope* self, str* line, Compiler* compiler) {
@@ -59,17 +72,22 @@ void comp_External(External* self, str* line, Compiler* compiler) {
 }
 
 void comp_Variable(Variable* self, str* line, Compiler* compiler) {
-	if(self->declaration->const_value
-			&& self->declaration->const_value->flags & fConstExpr) {
+	if(self->declaration->const_value && self->declaration->const_value->flags & fConstExpr) {
+		if(!(self->flags & fType)) {
+			strf(line, "(");
+			self->type->compiler((void*) self->type, line, compiler);
+			strf(line, ") ");
+		}
+
 		self->declaration->const_value->compiler(
 				self->declaration->const_value, line, compiler);
 		return;
 	}
 
+	if(self->generics.size) push(&self->declaration->generics.stack, self->generics);
 	self->declaration->identifier->compiler(
 			(void*) self->declaration->identifier, line, compiler);
-	if(self->generics.size)
-		append_generics_identifier(line, self->generics);
+	if(self->generics.size) self->declaration->generics.stack.size--;
 }
 
 void comp_GenericType(GenericType* self, str* line,
