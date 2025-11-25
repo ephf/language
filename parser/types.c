@@ -69,7 +69,7 @@ Type* peek_type(Type* type, TypeStateAction* action, unsigned flags) {
 			.data[type->GenericType.index];
 	}
 
-	return NULL;
+	return type;
 }
 
 OpenedType open_type_wa(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void*),
@@ -139,7 +139,7 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 			? acceptor : 0, accumulator);
 
 	if(!(flags & TraverseIntermeditate)) {
-		int result = acceptor(type, follower, accumulator);
+		int result = acceptor(otype.type, ofollower.type, accumulator);
 		if(result) return result - 1;
 	}
 
@@ -239,17 +239,21 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 	}
 
 	if(!(accumulator->flags & ClashPassive)) {
-		Type* const standalone = make_type_standalone(follower);
+		Type* const standalone = make_type_standalone(
+				follower->compiler == (void*) &comp_Wrapper && follower->Wrapper.anchor ?
+				(void*) follower->Wrapper.anchor : follower);
 
 		if(wrapper->assign_compare) wrapper->compare = standalone;
 		else wrapper->ref = (void*) standalone;
 
 		wrapper->flags = follower->flags;
 
-		if(wrapper->compare && follower->compiler == (void*) &comp_Wrapper) {
-			follower->Wrapper.compare = wrapper->compare;
+		if(follower->compiler == (void*) &comp_Wrapper) {
+			if(wrapper->compare) follower->Wrapper.compare = wrapper->compare;
+			if(wrapper->anchor) follower->Wrapper.anchor = wrapper->anchor;
 		}
 	}
+
 	return 1;
 }
 

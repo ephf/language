@@ -76,6 +76,7 @@ typedef struct {
 	Node* ref;
 	TypeStateAction action;
 	Type* compare;
+	struct GenericType* anchor;
 	unsigned variable : 1,
 			 assign_compare : 1;
 } Wrapper;
@@ -155,7 +156,7 @@ typedef struct {
 } PointerType;
 void comp_PointerType(PointerType*, str*, Compiler*);
 
-typedef struct {
+typedef struct GenericType {
 	extends_Type;
 	Declaration* declaration;
 	size_t index;

@@ -89,11 +89,19 @@ GenericsCollection collect_generics(Parser* parser) {
 		});
 		push(&declaration_setters, &generic_type->declaration);
 
-		push(&base_generics, new_type((Type) { .Wrapper = {
-					.compiler = (void*) &comp_Wrapper,
-					.flags = fConstExpr,
-					.trace = identifier.trace,
-		}}));
+		Wrapper* base_generic = (void*) new_type((Type) { .Wrapper = {
+				.compiler = (void*) &comp_Wrapper,
+				.flags = fConstExpr,
+				.trace = identifier.trace,
+				.anchor = (void*) new_type((Type) { .GenericType = {
+						.compiler = (void*) &comp_GenericType,
+						.flags = fConstExpr,
+						.trace = identifier.trace,
+						.index = base_generics.size,
+				}}),
+		}});
+		push(&base_generics, (void*) base_generic);
+		push(&declaration_setters, &base_generic->anchor->declaration);
 
 		put(last(parser->stack), identifier.trace.slice,
 				(void*) new_node((Node) { .VariableDeclaration = {
