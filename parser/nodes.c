@@ -56,14 +56,30 @@ typedef struct {
 } NumericLiteral;
 void comp_NumericLiteral(NumericLiteral*, str*, Compiler*);
 
+enum {
+	StateActionGenerics = 1,
+	StateActionCollection,
+};
+
+typedef Vector(struct TypeStateAction) TypeStateActions;
+typedef struct TypeStateAction {
+	unsigned type;
+	union {
+		TypeList TypeList;
+		TypeStateActions TypeStateActions;
+	};
+	Node* target;
+} TypeStateAction;
+
 typedef struct {
 	extends_Type;
-	Type* ref;
-	TypeList generics;
-	Declaration* generics_declaration;
-	unsigned warned : 1;
-} Auto;
-void comp_Auto(Auto*, str*, Compiler*);
+	Node* ref;
+	TypeStateAction action;
+	Type* compare;
+	unsigned variable : 1,
+			 assign_compare : 1;
+} Wrapper;
+void comp_Wrapper(Wrapper*, str*, Compiler*);
 
 typedef struct {
 	extends_Node;
@@ -79,7 +95,6 @@ typedef struct {
 } VariableDeclaration;
 typedef Vector(VariableDeclaration*) VariableDeclarationList;
 void comp_VariableDeclaration(VariableDeclaration*, str*, Compiler*);
-
 
 typedef struct {
 	extends_Node;
@@ -97,13 +112,6 @@ typedef struct {
 	Node* expression;
 } Statement;
 void comp_Statement(Statement*, str*, Compiler*);
-
-typedef struct {
-	extends_Node;
-	Declaration* declaration;
-	TypeList generics;
-} Variable;
-void comp_Variable(Variable*, str*, Compiler*);
 
 typedef struct {
 	extends_Node;
@@ -172,9 +180,8 @@ void comp_structLiteral(StructLiteral*, str*, Compiler*);
 union Type {
 	struct { extends_Type; };
 
-	Auto Auto;
+	Wrapper Wrapper;
 	External External;
-	Variable Variable;
 	GenericType GenericType;
 	Missing Missing;
 
@@ -199,10 +206,9 @@ union Node {
 	Scope Scope;
 	Missing Missing;
 	External External;
-	Variable Variable;
+	Wrapper Wrapper;
 
 	Type Type;
-	Auto Auto;
 
 	Declaration Declaration;
 	VariableDeclaration VariableDeclaration;

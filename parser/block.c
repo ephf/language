@@ -4,8 +4,7 @@ NodeList collect_until(Parser* parser, Node* (*supplier)(Parser*),
 		unsigned char divider, unsigned char terminator) {
 	NodeList collection = { 0 };
 
-	while(parser->tokenizer->current.type &&
-			parser->tokenizer->current.type != terminator) {
+	while(parser->tokenizer->current.type && parser->tokenizer->current.type != terminator) {
 		push(&collection, supplier(parser));
 		if(divider && !try(parser->tokenizer, divider, 0)) break;
 	}
@@ -16,23 +15,19 @@ NodeList collect_until(Parser* parser, Node* (*supplier)(Parser*),
 
 Node* statement(Parser* parser) {
 	if(parser->tokenizer->current.type == TokenIdentifier) {
-		if(streq(parser->tokenizer->current.trace.slice,
-					str("return"))) {
+		if(streq(parser->tokenizer->current.trace.slice, str("return"))) {
 			Trace trace_start = next(parser->tokenizer).trace;
 			Node* value = expression(parser);
 			expect(parser->tokenizer, ';');
 
-			if(last(parser->stack)->parent->compiler !=
-					(void*) &comp_FunctionDeclaration) {
+			if(last(parser->stack)->parent->compiler != (void*) &comp_FunctionDeclaration) {
 				push(parser->tokenizer->messages, Err(trace_start,
 							str("return statement needs to be "
 								"inside of a function")));
 			} else {
-				clash_types(last(parser->stack)->parent
-						->FunctionDeclaration.type
-						->FunctionType.signature.data[0],
-						value->type, value->trace,
-						parser->tokenizer->messages);
+				clash_types(last(parser->stack)->parent->FunctionDeclaration.type
+						->FunctionType.signature.data[0], value->type, value->trace,
+						parser->tokenizer->messages, 0);
 			}
 
 			return new_node((Node) { .ReturnStatement = {
@@ -41,12 +36,10 @@ Node* statement(Parser* parser) {
 			}});
 		}
 
-		if(streq(parser->tokenizer->current.trace.slice,
-					str("struct"))) {
+		if(streq(parser->tokenizer->current.trace.slice, str("struct"))) {
 			Trace trace_start = next(parser->tokenizer).trace;
 			IdentifierInfo info = new_identifier(
-					expect(parser->tokenizer, TokenIdentifier),
-					parser);
+					expect(parser->tokenizer, TokenIdentifier), parser);
 
 			StructType* type = (void*) new_type((Type) {
 					.StructType = {
@@ -75,28 +68,24 @@ Node* statement(Parser* parser) {
 			put(info.scope, info.identifier->base, declaration);
 
 			expect(parser->tokenizer, '{');
+			NodeList body = collect_until(parser, &statement, 0, '}');
+		
+			size_t field_end = 0;
+			for(; field_end < body.size; field_end++) {
+				Node* const next_field = body.data[field_end];
+				if(next_field->compiler != (void*) &comp_Wrapper
+						|| !next_field->Wrapper.variable
+						|| !(next_field->flags & fIgnoreStatment)) break;
 
-			// TODO: change expression() to a general collect_until
-			// and sift through the declarations (current system
-			// does not work for non-field values)
-			Node* possible_field = 0;
-			while(parser->tokenizer->current.type &&
-					parser->tokenizer->current.type != '}' &&
-					(possible_field = expression(parser))
-						->compiler == (void*) &comp_Variable &&
-					possible_field->flags & fIgnoreStatment) {
-				possible_field->Variable.declaration->is_inline = 1;
-				push(&type->fields,
-						(void*) possible_field->Variable.declaration);
-				expect(parser->tokenizer, ';');
+				next_field->Wrapper.ref->Declaration.is_inline = 1;
+				push(&type->fields, (void*) next_field->Wrapper.ref);
 			}
 
-			if(!try(parser->tokenizer, '}', 0)) {
-				NodeList declarations = collect_until(parser,
-						&statement, 0, '}');
-				push(&declarations, possible_field);
-				type->body->children = declarations;
+			NodeList declarations = { 0 };
+			for(; field_end < body.size; field_end++) {
+				push(&declarations, body.data[field_end]);
 			}
+			type->body->children = declarations;
 
 			push(&last(parser->stack)->declarations, declaration);
 			return new_node((Node) { .compiler = &comp_Ignore });
@@ -104,8 +93,7 @@ Node* statement(Parser* parser) {
 	}
 
 	Node* expr = expression(parser);
-	if(!(expr->flags & fStatementTerminated))
-		expect(parser->tokenizer, ';');
+	if(!(expr->flags & fStatementTerminated)) expect(parser->tokenizer, ';');
 
 	if(expr->flags & fIgnoreStatment) return new_node((Node) {
 			.compiler = &comp_Ignore,

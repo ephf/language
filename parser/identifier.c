@@ -2,7 +2,7 @@
 
 typedef struct {
 	Identifier* identifier;
-	Variable* value;
+	Wrapper* value;
 	Scope* scope;
 	Trace trace;
 	GenericsCollection generics_collection;

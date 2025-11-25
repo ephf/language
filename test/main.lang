@@ -1,5 +1,3 @@
-void inner<T>() {}
-void outer<K>() { inner<K>(); }
+T test<T>() {}
 
-outer<i32>();
-outer<u32>();
+auto x = test<i32>();

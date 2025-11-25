@@ -36,25 +36,24 @@ int filter_missing(Type* type, void* ignore) {
 	return type->compiler == (void*) &comp_Missing;
 }
 
-void recycle_missing(Type* missing, Parser* parser) {
-	Variable* possible_found = find(parser->stack, missing->trace);
+int recycle_missing(Type* missing, Type* _, Parser* parser) {
+	Wrapper* possible_found = find(parser->stack, missing->trace);
 
 	if(possible_found && possible_found->flags & fType) {
 		*missing = *(Type*)(void*) possible_found;
 	}
 
 	unbox((void*) possible_found);
+	return 0;
 }
 
-Variable* declaration(Node* type, Token identifier, Parser* parser) {
+Wrapper* declaration(Node* type, Token identifier, Parser* parser) {
 	// TODO: insert scope before calling info to catch generic
 	// type declarations
 	if(!(type->flags & fType)) {
 		push(parser->tokenizer->messages, Err(type->trace,
-					str("expected a type before "
-						"declaration identifier")));
-		push(parser->tokenizer->messages, Hint(
-					str("also try '\33[35mtypeof(expr)\33[0m'")));
+					str("expected a type before declaration identifier")));
+		push(parser->tokenizer->messages, Hint(str("also try '\33[35mtypeof(expr)\33[0m'")));
 		type = (void*) type->type;
 	}
 
@@ -85,7 +84,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 		info.identifier->declaration = (void*) declaration;
 
 		apply_generics((void*) declaration, info.generics_collection);
-		sift_type((void*) type, (void*) &recycle_missing, parser, 0);
+		traverse_type((void*) type, NULL, (void*) &recycle_missing, parser, TraverseGenerics);
 
 		push(&parser->stack, declaration->body);
 		push(&info.scope->declarations, (void*) declaration);
@@ -94,15 +93,13 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 		NodeList argument_declarations = collect_until(parser, &expression, ',', ')');
 
 		for(size_t i = 0; i < argument_declarations.size; i++) {
-			if(argument_declarations.data[i]->compiler
-					== (void*) &comp_Variable
-					&& argument_declarations.data[i]->flags
-						& fIgnoreStatment) {
-				push(&function_type->signature, argument_declarations.data[i]->type);
-				VariableDeclaration* argument =
-					(void*) argument_declarations.data[i]->Variable.declaration;
-				argument->is_inline = 1;
-				push(&declaration->arguments, argument);
+			Node* const argument = argument_declarations.data[i];
+			if(argument->compiler == (void*) &comp_Wrapper && argument->Wrapper.variable
+					&& argument_declarations.data[i]->flags & fIgnoreStatment) {
+				push(&function_type->signature, argument->type);
+				VariableDeclaration* const arg_declaration = (void*) argument->Wrapper.ref;
+				arg_declaration->is_inline = 1;
+				push(&declaration->arguments, arg_declaration);
 			} else {
 				push(parser->tokenizer->messages, Err(
 							argument_declarations.data[i]->trace,
@@ -113,8 +110,7 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 
 		if(!(declaration->flags & fExternal)) {
 			expect(parser->tokenizer, '{');
-			declaration->body->children = collect_until(parser,
-					&statement, 0, '}');
+			declaration->body->children = collect_until(parser, &statement, 0, '}');
 		}
 
 		parser->stack.size--;
@@ -122,13 +118,12 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 				fIgnoreStatment | fStatementTerminated * !(declaration->flags & fExternal));
 	}
 
-	VariableDeclaration* declaration =
-		(void*) new_node((Node) { .VariableDeclaration = {
-				.compiler = (void*) &comp_VariableDeclaration,
-				.trace = stretch(type->trace, info.trace),
-				.type = (void*) type,
-				.identifier = info.identifier,
-		}});
+	VariableDeclaration* declaration = (void*) new_node((Node) { .VariableDeclaration = {
+			.compiler = (void*) &comp_VariableDeclaration,
+			.trace = stretch(type->trace, info.trace),
+			.type = (void*) type,
+			.identifier = info.identifier,
+	}});
 	info.identifier->declaration = (void*) declaration;
 
 	push(&info.scope->declarations, (void*) declaration);
@@ -137,34 +132,29 @@ Variable* declaration(Node* type, Token identifier, Parser* parser) {
 	if(type->flags & fConst && try(parser->tokenizer, '=', 0)) {
 		declaration->const_value = right(left(parser), parser, 14);
 		clash_types(declaration->type, declaration->const_value->type,
-				declaration->trace, parser->tokenizer->messages);
+				declaration->trace, parser->tokenizer->messages, 0);
 	}
 
 	return variable_of((void*) declaration, declaration->trace, fIgnoreStatment);
 }
 
 Message see_declaration(Declaration* declaration, Node* node) {
-	return See(declaration->trace,
-				strf(0, "declaration of '\33[35m%.*s\33[0m'",
-					(int) node->trace.slice.size,
-					node->trace.slice.data));
+	return See(declaration->trace, strf(0, "declaration of '\33[35m%.*s\33[0m'",
+					(int) node->trace.slice.size, node->trace.slice.data));
 }
 
 Node* right(Node* lefthand, Parser* parser, unsigned char precedence) {
 	RightOperator operator;
 outer_while:
-	while((operator = right_operator_table
-				[parser->tokenizer->current.type]).precedence) {
-		if(operator.precedence >= precedence
-				+ (operator.type == RightAssignment)) break;
+	while((operator = right_operator_table [parser->tokenizer->current.type]).precedence) {
+		if(operator.precedence >= precedence + (operator.type == RightAssignment)) break;
 
 		switch(operator.type) {
 			case RightAltBinary: {
 				switch(parser->tokenizer->current.type) {
 					case '*':
 						if(!(lefthand->flags & fType)) break;
-						lefthand = reference(lefthand, stretch(
-									lefthand->trace,
+						lefthand = reference(lefthand, stretch(lefthand->trace,
 									next(parser->tokenizer).trace));
 						goto outer_while;
 				}
@@ -172,27 +162,22 @@ outer_while:
 			}
 
 			case RightAssignment:
-				if(!(lefthand->flags & fMutable) ||
-						lefthand->type->flags & fConst) {
-					push(parser->tokenizer->messages, Err(
-								lefthand->trace,
-								str("left hand of assignment "
-									"is not a mutable value")));
+				if(!(lefthand->flags & fMutable) || lefthand->type->flags & fConst) {
+					push(parser->tokenizer->messages, Err( lefthand->trace,
+								str("left hand of assignment is not a mutable value")));
 				}
 			case RightBinary: binary: {
 				Token operator_token = next(parser->tokenizer);
-				Node* righthand = right(left(parser), parser,
-						operator.precedence);
+				Node* righthand = right(left(parser), parser, operator.precedence);
 
 				clash_types(lefthand->type, righthand->type,
 						stretch(lefthand->trace, righthand->trace),
-						parser->tokenizer->messages);
+						parser->tokenizer->messages, 0);
 
 				lefthand = new_node((Node) { .BinaryOperation = {
 						.compiler = (void*) &comp_BinaryOperation,
 						.flags = lefthand->flags & righthand->flags,
-						.trace = stretch(lefthand->trace,
-								righthand->trace),
+						.trace = stretch(lefthand->trace, righthand->trace),
 						.type = lefthand->type,
 						.left = lefthand,
 						.operator = operator_token.trace.slice,
@@ -202,10 +187,8 @@ outer_while:
 			}
 
 			case RightDeclaration: {
-				if(!(lefthand->flags & fType))
-					return lefthand;
-				lefthand = (void*) declaration(lefthand,
-						next(parser->tokenizer), parser);
+				if(!(lefthand->flags & fType)) return lefthand;
+				lefthand = (void*) declaration(lefthand, next(parser->tokenizer), parser);
 				break;
 			}
 
@@ -216,14 +199,14 @@ outer_while:
 				Type* return_type;
 
 				const OpenedType opened_function_type = open_type(lefthand->type);
-				Type* const open_function_type = opened_function_type.open_type;
+				Type* const open_function_type = opened_function_type.type;
 
 				if(open_function_type->compiler != (void*) &comp_FunctionType) {
 					push(parser->tokenizer->messages, Err(lefthand->trace,
 								str("calling a non-function value")));
 
-					return_type = new_type((Type) { .Auto = {
-							.compiler = (void*) &comp_Auto,
+					return_type = new_type((Type) { .Wrapper = {
+							.compiler = (void*) &comp_Wrapper,
 							.trace = lefthand->trace,
 					}});
 				} else {
@@ -235,8 +218,7 @@ outer_while:
 				for(size_t i = 0; i < arguments.size; i++) {
 					if(i + 1 >= signature.size) {
 						push(parser->tokenizer->messages, Err(
-									stretch(arguments.data[i]->trace,
-										last(arguments)->trace),
+									stretch(arguments.data[i]->trace, last(arguments)->trace),
 									str("too many arguments in function call")));
 						push(parser->tokenizer->messages,
 								see_declaration((void*) open_function_type
@@ -245,7 +227,7 @@ outer_while:
 					}
 
 					clash_types(signature.data[i + 1], arguments.data[i]->type,
-							arguments.data[i]->trace, parser->tokenizer->messages);
+							arguments.data[i]->trace, parser->tokenizer->messages, 0);
 				}
 
 				if(arguments.size + 1 < signature.size) {
@@ -257,7 +239,7 @@ outer_while:
 				}
 				
 				return_type = make_type_standalone(return_type);
-				close_type(opened_function_type.actions);
+				close_type(opened_function_type.actions, 0);
 
 				return new_node((Node) { .FunctionCall = {
 						.compiler = (void*) &comp_FunctionCall,
@@ -269,15 +251,11 @@ outer_while:
 			}
 
 			case RightFieldAccess: {
-				const OpenedType opened = open_type(
-						(void*) lefthand->type);
-				StructType* const struct_type = 
-					(void*) opened.open_type;
+				const OpenedType opened = open_type((void*) lefthand->type);
+				StructType* const struct_type = (void*) opened.type;
 
-				str operator_token =
-					next(parser->tokenizer).trace.slice;
-				Token field_token = expect(parser->tokenizer,
-						TokenIdentifier);
+				str operator_token = next(parser->tokenizer).trace.slice;
+				Token field_token = expect(parser->tokenizer, TokenIdentifier);
 
 				// TODO: error message if not struct
 				if(struct_type->compiler != (void*) &comp_StructType) {
@@ -287,8 +265,7 @@ outer_while:
 				ssize_t found_index = -1;
 				for(size_t i = 0; i < struct_type->fields.size; i++) {
 					if(streq(field_token.trace.slice,
-								struct_type->fields.data[i]
-								->identifier->base)) {
+								struct_type->fields.data[i]->identifier->base)) {
 						found_index = i;
 					}
 				}
@@ -296,22 +273,20 @@ outer_while:
 				if(found_index < 0) {
 					push(parser->tokenizer->messages, Err(
 								field_token.trace, strf(0,
-									"no field named "
-									"'\33[35m%.*s\33[0m' on struct "
+									"no field named '\33[35m%.*s\33[0m' on struct "
 									"'\33[35m%.*s\33[0m'",
 									(int) field_token.trace.slice.size,
 									field_token.trace.slice.data,
 									(int) lefthand->trace.slice.size,
 									lefthand->trace.slice.data)));
-					push(parser->tokenizer->messages,
-							see_declaration((void*) struct_type,
+					push(parser->tokenizer->messages, see_declaration((void*) struct_type,
 								lefthand));
 					break;
 				}
 
 				Type* field_type = make_type_standalone(
 						struct_type->fields.data[found_index]->type);
-				close_type(opened.actions);
+				close_type(opened.actions, 0);
 
 				lefthand = new_node((Node) { .BinaryOperation = {
 						.compiler = (void*) &comp_BinaryOperation,

@@ -22,8 +22,8 @@ Node* left(Parser* parser) {
 			return new_node((Node) { .NumericLiteral = {
 					.compiler = (void*) &comp_NumericLiteral,
 					.trace = token.trace,
-					.type = new_type((Type) { .Auto = {
-							.compiler = (void*) &comp_Auto,
+					.type = new_type((Type) { .Wrapper = {
+							.compiler = (void*) &comp_Wrapper,
 							.trace = token.trace,
 							.flags = fConstExpr | tfNumeric,
 					}}),
@@ -33,8 +33,8 @@ Node* left(Parser* parser) {
 
 		case TokenIdentifier: {
 			if(streq(token.trace.slice, str("auto"))) {
-				return (void*) new_type((Type) { .Auto = {
-						.compiler = (void*) &comp_Auto,
+				return (void*) new_type((Type) { .Wrapper = {
+						.compiler = (void*) &comp_Wrapper,
 						.trace = token.trace,
 				}});
 			}
@@ -52,10 +52,8 @@ Node* left(Parser* parser) {
 				Type* type = (void*) right(left(parser), parser, 13);
 				
 				if(!(type->flags & fType)) {
-					push(parser->tokenizer->messages, Err(
-								type->trace,
-								str("expected a type after "
-									"'\33[35mconst\33[0m'")));
+					push(parser->tokenizer->messages, Err(type->trace,
+								str("expected a type after '\33[35mconst\33[0m'")));
 					type = type->type;
 				}
 
@@ -96,20 +94,18 @@ Node* left(Parser* parser) {
 
 			if(try(parser->tokenizer, '{', 0)) {
 				const OpenedType opened = open_type((void*) info.value);
-				StructType* const struct_type =
-					(void*) opened.open_type;
+				StructType* const struct_type = (void*) opened.type;
 
 				// TODO: error message if not struct
 				if(struct_type->compiler != (void*) comp_StructType) {
-					close_type(opened.actions);
+					close_type(opened.actions, 0);
 					goto ret;
 				}
 
-				StructLiteral* struct_literal = (void*) new_node(
-						(Node) { .StructLiteral = {
-							.compiler = (void*) &comp_structLiteral,
-							.type = (void*) info.value,
-						}});
+				StructLiteral* struct_literal = (void*) new_node((Node) { .StructLiteral = {
+						.compiler = (void*) &comp_structLiteral,
+						.type = (void*) info.value,
+				}});
 
 				while(parser->tokenizer->current.type
 						&& parser->tokenizer->current.type != '}') {
@@ -122,26 +118,21 @@ Node* left(Parser* parser) {
 						unbox(field_value);
 						field_value = expression(parser);
 
-						for(size_t i = 0; i < struct_type->fields.size;
-								i++) {
+						for(size_t i = 0; i < struct_type->fields.size; i++) {
 							if(streq(field_name, struct_type->fields
 										.data[i]->identifier->base))
 								goto found_field;
 						}
 
-						push(parser->tokenizer->messages, Err(
-									field_name_trace,
-									strf(0, "no field named "
-										"'\33[35m%.*s\33[0m' on "
+						push(parser->tokenizer->messages, Err(field_name_trace,
+									strf(0, "no field named '\33[35m%.*s\33[0m' on "
 										"struct '\33[35m%.*s\33[0m'",
-										(int) field_name_trace
-											.slice.size,
+										(int) field_name_trace.slice.size,
 										field_name_trace.slice.data,
 										(int) info.trace.slice.size,
 										info.trace.slice.data)));
 						push(parser->tokenizer->messages,
-								see_declaration((void*) struct_type,
-									(void*) info.value));
+								see_declaration((void*) struct_type, (void*) info.value));
 
 					}
 found_field:
@@ -152,7 +143,7 @@ found_field:
 				}
 				struct_literal->trace = stretch(info.trace,
 						expect(parser->tokenizer, '}').trace);
-				close_type(opened.actions);
+				close_type(opened.actions, 0);
 				return (void*) struct_literal;
 			}
 
@@ -170,8 +161,8 @@ ret:
 			return new_node((Node) { .External = {
 					.compiler = (void*) &comp_External,
 					.trace = token.trace,
-					.type = new_type((Type) { .Auto = {
-							.compiler = (void*) &comp_Auto,
+					.type = new_type((Type) { .Wrapper = {
+							.compiler = (void*) &comp_Wrapper,
 							.trace = token.trace,
 					}}),
 					.data = token.trace.slice,
@@ -179,15 +170,13 @@ ret:
 	}
 
 	push(parser->tokenizer->messages, Err(token.trace,
-				strf(0, "expected a \33[35mliteral\33[0m, "
-					"but got '\33[35m%.*s\33[0m'",
-					(int) token.trace.slice.size,
-					token.trace.slice.data)));
+				strf(0, "expected a \33[35mliteral\33[0m, but got '\33[35m%.*s\33[0m'",
+					(int) token.trace.slice.size, token.trace.slice.data)));
 	return new_node((Node) {
 			.compiler = (void*) &comp_NumericLiteral,
 			.trace = token.trace,
-			.type = new_type((Type) { .Auto = {
-					.compiler = (void*) &comp_Auto,
+			.type = new_type((Type) { .Wrapper = {
+					.compiler = (void*) &comp_Wrapper,
 					.trace = token.trace,
 			}}),
 	});

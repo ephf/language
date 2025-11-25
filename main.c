@@ -4,6 +4,8 @@
 
 typedef Vector(char*) CStrings;
 
+int in_compiler_step = 0;
+
 void create_std_type(Scope* scope, str name, str internal) {
 	Type* type = new_type((Type) { .External = {
 			.compiler = (void*) &comp_External,
@@ -126,6 +128,7 @@ int main(int argc, char** argv) {
 
 	entry->body->children = collect_until(&parser, &statement, 0, 0);
 
+	in_compiler_step = 1;
 	str temp_line = { 0 };
 	entry->compiler((void*) entry, &temp_line, &compiler);
 

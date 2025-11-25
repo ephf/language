@@ -5,33 +5,36 @@ NodeList collect_until(Parser* parser, Node* (*supplier)(Parser*),
 		unsigned char divider, unsigned char terminator);
 Node* expression(Parser* parser);
 Message see_declaration(Declaration* declaration, Node* node);
-void clash_types(Type* a, Type* b, Trace trace, Messages* messages);
+int clash_types(Type* a, Type* b, Trace trace, Messages* messages, unsigned flags);
 void stringify_type(Type* type, str* string, unsigned flags);
 
 Type* wrap_applied_generics(Type* type, TypeList generics, Declaration* declaration) {
-	return new_type((Type) { .Auto = {
-			.compiler = (void*) &comp_Auto,
+	return new_type((Type) { .Wrapper = {
+			.compiler = (void*) &comp_Wrapper,
 			.trace = type->trace,
 			.flags = type->flags,
-			.generics = generics,
-			.generics_declaration = declaration,
-			.ref = type,
+			.action = { StateActionGenerics, generics, (void*) declaration },
+			.ref = (void*) type,
 	}});
 }
 
-void assign_generics(Variable* variable, Parser* parser) {
-	Declaration* const declaration = variable->declaration;
+void assign_generics(Wrapper* variable, Parser* parser) {
+	Declaration* const declaration = (void*) variable->ref;
 	if(!declaration->generics.stack.size) return;
 	const TypeList base_generics = declaration->generics.stack.data[0];
 
 	TypeList input_generics = { 0 };
 	for(size_t i = 0; i < base_generics.size; i++) {
-		push(&input_generics, clone_base_type(base_generics.data[i]));
+		push(&input_generics, new_type((Type) { .Wrapper = {
+					.compiler = (void*) &comp_Wrapper,
+					.trace = base_generics.data[i]->trace,
+					.flags = base_generics.data[i]->flags,
+					.compare = base_generics.data[i],
+		}}));
 	}
 
 	if(try(parser->tokenizer, '<', 0)) {
-		NodeList type_arguments = collect_until(parser, &expression,
-				',', '>');
+		NodeList type_arguments = collect_until(parser, &expression, ',', '>');
 		for(size_t i = 0; i < type_arguments.size; i++) {
 			if(!(type_arguments.data[i]->flags & fType)) {
 				push(parser->tokenizer->messages, Err(
@@ -40,26 +43,22 @@ void assign_generics(Variable* variable, Parser* parser) {
 			}
 
 			if(i >= base_generics.size) {
-				push(parser->tokenizer->messages, Err(
-							stretch(type_arguments.data[i]->trace,
-								last(type_arguments)->trace),
-							str("too many type arguments")));
-				push(parser->tokenizer->messages,
-						see_declaration(declaration,
+				push(parser->tokenizer->messages, Err(stretch(type_arguments.data[i]->trace,
+								last(type_arguments)->trace), str("too many type arguments")));
+				push(parser->tokenizer->messages, see_declaration(declaration,
 							type_arguments.data[i]));
 				break;
 			}
 
-			clash_types(input_generics.data[i],
-					(void*) type_arguments.data[i],
-					type_arguments.data[i]->trace,
-					parser->tokenizer->messages);
+			clash_types(input_generics.data[i], (void*) type_arguments.data[i],
+					type_arguments.data[i]->trace, parser->tokenizer->messages, 0);
 		}
 	}
 
-	variable->generics = input_generics;
-	variable->type = wrap_applied_generics(variable->type,
-			input_generics, declaration);
+	variable->action = (TypeStateAction) {
+		StateActionGenerics, input_generics, (void*) declaration
+	};
+	variable->type = wrap_applied_generics(variable->type, input_generics, declaration);
 	push(&declaration->generics.variants, input_generics);
 }
 
@@ -71,8 +70,7 @@ typedef struct {
 } GenericsCollection;
 
 GenericsCollection collect_generics(Parser* parser) {
-	if(!try(parser->tokenizer, '<', 0))
-		return (GenericsCollection) { 0 };
+	if(!try(parser->tokenizer, '<', 0)) return (GenericsCollection) { 0 };
 
 	TypeList base_generics = { 0 };
 	DeclarationSetters declaration_setters = { 0 };
@@ -91,8 +89,8 @@ GenericsCollection collect_generics(Parser* parser) {
 		});
 		push(&declaration_setters, &generic_type->declaration);
 
-		push(&base_generics, new_type((Type) { .Auto = {
-					.compiler = (void*) &comp_Auto,
+		push(&base_generics, new_type((Type) { .Wrapper = {
+					.compiler = (void*) &comp_Wrapper,
 					.flags = fConstExpr,
 					.trace = identifier.trace,
 		}}));
@@ -116,8 +114,7 @@ GenericsCollection collect_generics(Parser* parser) {
 	};
 }
 
-void apply_generics(Declaration* declaration,
-		GenericsCollection collection) {
+void apply_generics(Declaration* declaration, GenericsCollection collection) {
 	if(!collection.base_generics.size) return;
 
 	push(&declaration->generics.stack, collection.base_generics);
