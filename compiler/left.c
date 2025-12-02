@@ -1,7 +1,6 @@
 #include "compiler.c"
 
-void comp_NumericLiteral(NumericLiteral* self, str* line,
-		Compiler* compiler) {
+void comp_NumericLiteral(NumericLiteral* self, str* line, Compiler* compiler) {
 	strf(line, "%ld", self->number);
 }
 

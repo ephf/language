@@ -42,6 +42,8 @@ int recycle_missing(Type* missing, Type* _, Parser* parser) {
 
 	if(possible_found && possible_found->flags & fType) {
 		*missing = *(Type*)(void*) possible_found;
+		unbox((void*) possible_found);
+		return 1;
 	}
 
 	unbox((void*) possible_found);
@@ -198,7 +200,7 @@ outer_while:
 				TypeList signature = { 0 };
 				Type* return_type;
 
-				const OpenedType opened_function_type = open_type(lefthand->type);
+				const OpenedType opened_function_type = open_type(lefthand->type, 0);
 				Type* const open_function_type = opened_function_type.type;
 
 				if(open_function_type->compiler != (void*) &comp_FunctionType) {
@@ -234,7 +236,8 @@ outer_while:
 					push(parser->tokenizer->messages, Err(lefthand->trace,
 								str("not enough arguments in function call")));
 					push(parser->tokenizer->messages,
-							see_declaration((void*) lefthand->type->FunctionType.declaration,
+							see_declaration(
+								(void*) open_function_type->FunctionType.declaration,
 								lefthand));
 				}
 				
@@ -251,7 +254,7 @@ outer_while:
 			}
 
 			case RightFieldAccess: {
-				const OpenedType opened = open_type((void*) lefthand->type);
+				const OpenedType opened = open_type((void*) lefthand->type, 0);
 				StructType* const struct_type = (void*) opened.type;
 
 				str operator_token = next(parser->tokenizer).trace.slice;

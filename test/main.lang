@@ -1,15 +1,18 @@
 T* extern malloc<T>(usize size);
-void extern free<T>(T* ptr);
 
-struct HeapPointer<T> {
-	T* pointer;
+struct Rc<T> {
+	T* ptr;
+	usize counter;
 }
 
-HeapPointer<T> alloc<T>(usize size) {
-	return HeapPointer { malloc(size) };
+Rc<T> alloc_rc<T>(usize size) {
+	return Rc { malloc(size), 0 };
 }
 
-auto x = alloc(4);
+T* reference<T>(Rc<T> rc) {
+	rc.counter = rc.counter + 1;
+	return rc.ptr;
+}
 
-free(x.pointer);
-x.pointer = malloc<i32>(4);
+auto rc = alloc_rc(4);
+i32* ref = reference(rc);

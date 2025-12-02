@@ -7,6 +7,8 @@ void comp_struct_declaration(StructType* self, str* line, Compiler* compiler) {
 
 	strf(&typedef_line, " { ");
 	for(size_t i = 0; i < self->fields.size; i++) {
+		VariableDeclaration* var = self->fields.data[i];
+
 		self->fields.data[i]->compiler((void*) self->fields.data[i], &typedef_line, compiler);
 		strf(&typedef_line, "; ");
 	}
@@ -24,14 +26,17 @@ void comp_VariableDeclaration(VariableDeclaration* self, str* line, Compiler* co
 		return;
 
 	if(self->const_value && self->const_value->flags & fType) {
-		const OpenedType opened = open_type((void*) self->const_value);
+		const OpenedType opened = open_type((void*) self->const_value, 0);
 		comp_struct_declaration((void*) opened.type, line, compiler);
 		close_type(opened.actions, 0);
 		return;
 	}
 
-	str decl_line = new_line(compiler);
-	if(!self->is_inline) line = &decl_line;
+	str decl_line;
+	if(!self->is_inline) {
+		decl_line = new_line(compiler);
+		line = &decl_line;
+	}
 
 	self->type->compiler((void*) self->type, line, compiler);
 	strf(line, " ");
@@ -86,7 +91,7 @@ void dual_function_compiler(FunctionDeclaration* self, Compiler* compiler, int h
 		}
 	}
 	strf(&declaration_line, hoisted ? ");" : ") {");
-	push(&compiler->sections.data[section * !hoisted].lines, declaration_line);
+	push(&compiler->sections.data[hoisted ?: section].lines, declaration_line);
 
 	if(hoisted) {
 		compiler->open_section = previous_section;

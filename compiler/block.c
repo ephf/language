@@ -13,16 +13,13 @@ void comp_ReturnStatement(ReturnStatement* self, str* line,
 		Compiler* compiler) {
 	str statement_line = new_line(compiler);
 	strf(&statement_line, "return ");
-	self->value->compiler((void*) self->value, &statement_line,
-			compiler);
-	push(&compiler->sections.data[compiler->open_section].lines,
-			strf(&statement_line, ";"));
+	self->value->compiler((void*) self->value, &statement_line, compiler);
+	push(&compiler->sections.data[compiler->open_section].lines, strf(&statement_line, ";"));
 }
 
 void comp_StructType(StructType* self, str* line, Compiler* compiler) {
 	strf(line, "struct ");
-	self->parent->identifier->compiler((void*) self->parent->identifier, line,
-			compiler);
+	self->parent->identifier->compiler((void*) self->parent->identifier, line, compiler);
 }
 
 void comp_structLiteral(StructLiteral* self, str* line, Compiler* compiler) {
@@ -39,8 +36,7 @@ void comp_structLiteral(StructLiteral* self, str* line, Compiler* compiler) {
 					self->field_names.data[i].data);
 		}
 
-		self->fields.data[i]->compiler(self->fields.data[i], line,
-				compiler);
+		self->fields.data[i]->compiler(self->fields.data[i], line, compiler);
 	}
 	strf(line, " }");
 }

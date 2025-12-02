@@ -9,7 +9,10 @@ extern int in_compiler_step;
 extern Compiler* generics_compiler_context;
 TypeStateActions global_state_actions = { 0 };
 
-enum { ActionKeepGlobalState = 1 << 0 };
+enum {
+	ActionKeepGlobalState = 1 << 2,
+	ActionNoChildCompilation = 1 << 3,
+};
 
 void type_state_action(TypeStateAction action, unsigned flags) {
 	if(!(flags & ActionKeepGlobalState)) {
@@ -22,7 +25,7 @@ void type_state_action(TypeStateAction action, unsigned flags) {
 
 			static int noloop = 1;
 
-			if(in_compiler_step && noloop) {
+			if(in_compiler_step && noloop && !(flags & ActionNoChildCompilation)) {
 				noloop = 0;
 				str unique_key = { 0 };
 				append_generics_identifier(&unique_key, action.TypeList);
@@ -75,7 +78,8 @@ TypeList find_last_generic_action(TypeStateActions actions, Declaration* declara
 				break;
 
 			case StateActionCollection: {
-				TypeList found = find_last_generic_action(actions, declaration);
+				TypeList found = find_last_generic_action(actions.data[i - 1].TypeStateActions,
+						declaration);
 				if(found.size) return found;
 				break;
 			}
@@ -115,12 +119,12 @@ Type* peek_type(Type* type, TypeStateAction* action, unsigned flags) {
 }
 
 OpenedType open_type_wa(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void*),
-		void* accumulator) {
+		void* accumulator, unsigned flags) {
 	OpenedType opened_type = { 0 };
 	if(!type) return opened_type;
 	TypeStateAction action = { 0 };
 
-	while((opened_type.type = peek_type(type, &action, 0)) != type) {
+	while((opened_type.type = peek_type(type, &action, flags)) != type) {
 		type = opened_type.type;
 		if(acceptor) acceptor(type, follower, accumulator);
 
@@ -133,7 +137,7 @@ OpenedType open_type_wa(Type* type, Type* follower, int (*acceptor)(Type*, Type*
 	return opened_type;
 }
 
-#define open_type(type) open_type_wa(type, NULL, NULL, NULL);
+#define open_type(type, flags) open_type_wa(type, NULL, NULL, NULL, flags);
 
 void close_type(TypeStateActions actions, unsigned flags) {
 	for(size_t i = actions.size; i > 0; i--) {
@@ -144,18 +148,19 @@ void close_type(TypeStateActions actions, unsigned flags) {
 
 Type* make_type_standalone(Type* type) {
 	TypeStateActions actions = { 0 };
+	if(!global_state_actions.size) return type;
+
 	for(size_t i = 0; i < global_state_actions.size; i++) {
 		push(&actions, global_state_actions.data[i]);
 	}
 
-	return global_state_actions.size
-		? new_type((Type) { .Wrapper = {
-				.compiler = (void*) &comp_Wrapper,
-				.flags = type->flags,
-				.trace = type->trace,
-				.action = { StateActionCollection, .TypeStateActions = actions },
-				.ref = (void*) type,
-		}}) : type;
+	return new_type((Type) { .Wrapper = {
+			.compiler = (void*) &comp_Wrapper,
+			.flags = type->flags,
+			.trace = type->trace,
+			.action = { StateActionCollection, .TypeStateActions = actions },
+			.ref = (void*) type,
+	}});
 }
 
 enum {
@@ -181,9 +186,11 @@ static inline int traverse_generics(Declaration* declaration,
 
 int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void*),
 		void* accumulator, unsigned flags) {
-	const OpenedType ofollower = open_type(follower);
+	const OpenedType ofollower = open_type(follower, flags
+			& (ActionKeepGlobalState | ActionNoChildCompilation));
 	const OpenedType otype = open_type_wa(type, follower, (flags & TraverseIntermeditate)
-			? acceptor : 0, accumulator);
+			? acceptor : 0, accumulator, flags 
+			& (ActionKeepGlobalState | ActionNoChildCompilation));
 
 	int result = 0, roffset = 0;
 	if(!(flags & TraverseIntermeditate)) {
@@ -212,7 +219,8 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 					break;
 			}
 		} else {
-			result = traverse_generics((void*) otype.type, acceptor, accumulator, flags);
+			result = traverse_generics((void*) otype.type->StructType.parent, acceptor,
+					accumulator, flags);
 		}
 
 		if(result);
@@ -229,8 +237,8 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 				acceptor, accumulator, flags);
 	}
 
-	close_type(otype.actions, 0);
-	close_type(ofollower.actions, 0);
+	close_type(otype.actions, flags & (ActionKeepGlobalState | ActionNoChildCompilation));
+	close_type(ofollower.actions, flags & (ActionKeepGlobalState | ActionNoChildCompilation));
 	return result - roffset;
 }
 
@@ -256,7 +264,7 @@ int stringify_acceptor(Type* type, Type* _, StringifyAccumulator* accumulator) {
 		strf(accumulator->string, accumulator->flags & StringifyAlphaNum
 				? "struct_%.*s" : "struct %.*s",
 				(int) type->StructType.parent->identifier->base.size,
-				type->StructType.parent->identifier->base.size);
+				type->StructType.parent->identifier->base.data);
 	} else {
 		strf(accumulator->string, accumulator->flags & StringifyAlphaNum
 				? "UNKNOWN" : "~unknown");
@@ -266,7 +274,8 @@ int stringify_acceptor(Type* type, Type* _, StringifyAccumulator* accumulator) {
 
 void stringify_type(Type* type, str* string, unsigned flags) {
 	traverse_type(type, NULL, (void*) &stringify_acceptor,
-			&(StringifyAccumulator) { string, flags }, 0);
+			&(StringifyAccumulator) { string, flags },
+			ActionKeepGlobalState | ActionNoChildCompilation);
 }
 
 enum {
@@ -328,7 +337,7 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 }
 
 int clash_acceptor(Type* type, Type* follower, ClashAccumulator* accumulator) {
-	printf("\33[90mclash:\t\t %-24.*s %.*s\n\33[0m",
+	printf("\33[90mclash:\t\t %-24.*s %.*s\33[0m\n",
 			(int) type->trace.slice.size, type->trace.slice.data,
 			(int) follower->trace.slice.size, follower->trace.slice.data);
 

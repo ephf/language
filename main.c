@@ -109,11 +109,11 @@ int main(int argc, char** argv) {
 	}
 
 	Messages messages = { 0 };
-	Tokenizer tokenizer = new_tokenizer(input_files.data[0],
-			input_content, &messages);
+	Tokenizer tokenizer = new_tokenizer(input_files.data[0], input_content, &messages);
 	Parser parser = { &tokenizer };
 	Compiler compiler = { .messages = &messages };
 
+	push(&compiler.sections, (CompilerSection) { 0 });
 	push(&compiler.sections, (CompilerSection) { 0 });
 	push(&compiler.sections.data[0].lines, str("#include <stdint.h>"));
 	push(&compiler.sections.data[0].lines, str("#include <stdio.h>"));

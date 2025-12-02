@@ -139,7 +139,7 @@ void append_generics_identifier(str* string, TypeList generics) {
 	
 	for(size_t i = 0; i < generics.size; i++) {
 		strf(string, "__");
-		stringify_type(generics.data[i], string, 1 << 0);
+		stringify_type(generics.data[i], string, 1 << 0 /* StringifyAlphaNum */);
 	}
 }
 

@@ -93,7 +93,7 @@ Node* left(Parser* parser) {
 			});
 
 			if(try(parser->tokenizer, '{', 0)) {
-				const OpenedType opened = open_type((void*) info.value);
+				const OpenedType opened = open_type((void*) info.value, 0);
 				StructType* const struct_type = (void*) opened.type;
 
 				// TODO: error message if not struct
