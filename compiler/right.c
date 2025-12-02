@@ -2,7 +2,8 @@
 
 void comp_struct_declaration(StructType* self, str* line, Compiler* compiler) {
 	str typedef_line = strf(0, "struct ");
-	self->identifier->compiler((void*) self->identifier, &typedef_line, compiler);
+	self->parent->identifier->compiler((void*) self->parent->identifier,
+			&typedef_line, compiler);
 
 	strf(&typedef_line, " { ");
 	for(size_t i = 0; i < self->fields.size; i++) {
@@ -15,9 +16,11 @@ void comp_struct_declaration(StructType* self, str* line, Compiler* compiler) {
 }
 
 void comp_VariableDeclaration(VariableDeclaration* self, str* line, Compiler* compiler) {
-	if(self->type->flags & fConst
-			&& self->const_value->flags & fConstExpr
-			&& !self->observed)
+	if(
+			// self->type->flags & fConst
+			// && self->const_value->flags & fConstExpr
+			// && !self->observed
+			self->generics.stack.size == 1)
 		return;
 
 	if(self->const_value && self->const_value->flags & fType) {
@@ -97,27 +100,11 @@ void dual_function_compiler(FunctionDeclaration* self, Compiler* compiler, int h
 	compiler->open_section = previous_section;
 }
 
-void comp_FunctionDeclaration(FunctionDeclaration* self, str* line,
-		Compiler* compiler) {
+void comp_FunctionDeclaration(FunctionDeclaration* self, str* line, Compiler* compiler) {
 	if(self->flags & fExternal || self->generics.stack.size == 1) return;
 
-//	if(self->generics.stack.size == 1) {
-//		for(size_t i = 0; i < self->generics.variants.size; i++) {
-//			if(!self->generics.variants.data[i].size) continue;
-//
-//			push(&self->generics.stack, self->generics.variants.data[i]);
-//			dual_function_compiler(self, compiler, 1);
-//			dual_function_compiler(self, compiler, 0);
-//			self->generics.stack.size--;
-//		}
-//		return;
-//	}
-
-	str identifier = { 0 };
-	self->identifier->compiler((void*) self->identifier, &identifier, compiler);
 	dual_function_compiler(self, compiler, 1);
 	dual_function_compiler(self, compiler, 0);
-	free(identifier.data);
 }
 
 void function_type_typedef(FunctionType* self, Compiler* compiler, str identifier) {
@@ -144,24 +131,6 @@ void comp_FunctionType(FunctionType* self, str* line, Compiler* compiler) {
 		self->typedef_id = -1;
 
 		str base_identifier = strf(0, "__Function%zd", typedef_id);
-
-		if(self->declaration->generics.stack.size) {
-			Generics* generics = &self->declaration->generics;
-			strs identifiers = filter_unique_generics_variants(
-					generics->variants, base_identifier);
-
-			for(size_t i = 0; i < generics->variants.size; i++) {
-				if(!generics->variants.data[i].size) continue;
-
-				push(&generics->stack, generics->variants.data[i]);
-				function_type_typedef(self, compiler, identifiers.data[i]);
-
-				generics->stack.size--;
-			}
-
-			free(base_identifier.data);
-		}
-
 		self->typedef_id = typedef_id;
 	}
 

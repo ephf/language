@@ -19,9 +19,22 @@ void type_state_action(TypeStateAction action, unsigned flags) {
 	switch(action.type) {
 		case StateActionGenerics:
 			push(&action.target->Declaration.generics.stack, action.TypeList);
-			if(in_compiler_step) {
-				action.target->compiler(action.target, NULL, generics_compiler_context);
+
+			static int noloop = 1;
+
+			if(in_compiler_step && noloop) {
+				noloop = 0;
+				str unique_key = { 0 };
+				append_generics_identifier(&unique_key, action.TypeList);
+				noloop = 1;
+
+				if(!get(action.target->Declaration.generics.unique_map,
+							(Trace) { .slice = unique_key })) {
+					put(&action.target->Declaration.generics.unique_map, unique_key, NULL);
+					action.target->compiler(action.target, NULL, generics_compiler_context);
+				}
 			}
+
 			break;
 
 		case StateActionCollection:
@@ -52,16 +65,45 @@ void undo_type_state_action(TypeStateAction action, unsigned flags) {
 	}
 }
 
+TypeList find_last_generic_action(TypeStateActions actions, Declaration* declaration) {
+	for(size_t i = actions.size; i > 0; i--) {
+		switch(actions.data[i - 1].type) {
+			case StateActionGenerics:
+				if(actions.data[i - 1].target == (void*) declaration) {
+					return actions.data[i - 1].TypeList;
+				}
+				break;
+
+			case StateActionCollection: {
+				TypeList found = find_last_generic_action(actions, declaration);
+				if(found.size) return found;
+				break;
+			}
+		}
+	}
+
+	return (TypeList) { 0 };
+}
+
 Type* peek_type(Type* type, TypeStateAction* action, unsigned flags) {
-	if(type->compiler == (void*) &comp_Wrapper && type->Wrapper.ref) {
-		if(type->Wrapper.action.type) {
-			type_state_action(type->Wrapper.action, flags);
-			*action = type->Wrapper.action;
+	if(type->compiler == (void*) &comp_Wrapper) {
+		if(in_compiler_step && type->Wrapper.anchor) {
+			Type* anchor = peek_type((void*) type->Wrapper.anchor, action, flags);
+			return type == anchor ? type : anchor;
 		}
 
-		return type->Wrapper.variable
-			? type->Wrapper.ref->Declaration.const_value
-			: (void*) type->Wrapper.ref;
+		if(type->Wrapper.ref) {
+			if(type->Wrapper.action.type) {
+				type_state_action(type->Wrapper.action, flags);
+				*action = type->Wrapper.action;
+			}
+
+			return type->Wrapper.variable
+				? type->Wrapper.ref->Declaration.const_value
+				: (void*) type->Wrapper.ref;
+		}
+
+		return type;
 	}
 
 	if(type->compiler == (void*) &comp_GenericType) {
@@ -101,12 +143,17 @@ void close_type(TypeStateActions actions, unsigned flags) {
 }
 
 Type* make_type_standalone(Type* type) {
+	TypeStateActions actions = { 0 };
+	for(size_t i = 0; i < global_state_actions.size; i++) {
+		push(&actions, global_state_actions.data[i]);
+	}
+
 	return global_state_actions.size
 		? new_type((Type) { .Wrapper = {
 				.compiler = (void*) &comp_Wrapper,
 				.flags = type->flags,
 				.trace = type->trace,
-				.action = { StateActionCollection, .TypeStateActions = global_state_actions },
+				.action = { StateActionCollection, .TypeStateActions = actions },
 				.ref = (void*) type,
 		}}) : type;
 }
@@ -138,27 +185,44 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 	const OpenedType otype = open_type_wa(type, follower, (flags & TraverseIntermeditate)
 			? acceptor : 0, accumulator);
 
+	int result = 0, roffset = 0;
 	if(!(flags & TraverseIntermeditate)) {
-		int result = acceptor(otype.type, ofollower.type, accumulator);
-		if(result) return result - 1;
+		result = acceptor(otype.type, ofollower.type, accumulator);
+		if(result) roffset = 1;
 	}
 
-	if(follower && otype.type->compiler != ofollower.type->compiler) return 1;
-
-	int result = 0;
-	if(otype.type->compiler == (void*) &comp_PointerType) {
-		result = traverse_type(otype.type->PointerType.base, ofollower.type->PointerType.base,
-				acceptor, accumulator, flags);
+	if(result)
+		;;
+	if(follower && otype.type->compiler != ofollower.type->compiler) {
+		result = 1;
+	} else if(otype.type->compiler == (void*) &comp_PointerType) {
+		result = traverse_type(otype.type->PointerType.base, ofollower.type
+				? ofollower.type->PointerType.base : NULL, acceptor, accumulator, flags);
 	} else if(otype.type->compiler == (void*) &comp_StructType) {
-		result = traverse_generics((void*) otype.type, acceptor, accumulator, flags);
-		if(ofollower.type->StructType.fields.size != otype.type->StructType.fields.size) {
-			result = 1;
+		if(ofollower.type == otype.type && otype.type->StructType.parent->generics.stack.size) {
+			TypeList a = find_last_generic_action(otype.actions,
+					(void*) otype.type->StructType.parent);
+			TypeList b = find_last_generic_action(ofollower.actions,
+					(void*) otype.type->StructType.parent);
+
+			if(a.size != b.size) result = 1;
+			else for(size_t i = 0; i < a.size; i++) {
+				if((result = traverse_type(a.data[i], b.data[i], acceptor,
+								accumulator, flags)))
+					break;
+			}
+		} else {
+			result = traverse_generics((void*) otype.type, acceptor, accumulator, flags);
 		}
 
-		for(size_t i = 0; !result && i < otype.type->StructType.fields.size; i++) {
+		if(result);
+		else if(ofollower.type && ofollower.type->StructType.fields.size
+				!= otype.type->StructType.fields.size) {
+			result = 1;
+		} else for(size_t i = 0; !result && i < otype.type->StructType.fields.size; i++) {
 			result = traverse_type(otype.type->StructType.fields.data[i]->type,
-					ofollower.type->StructType.fields.data[i]->type, acceptor,
-					accumulator, flags);
+					ofollower.type ? ofollower.type->StructType.fields.data[i]->type: 0,
+					acceptor, accumulator, flags);
 		}
 	} else if(otype.type->compiler == (void*) &comp_FunctionType) {
 		result = traverse_generics((void*) otype.type->FunctionType.declaration,
@@ -167,7 +231,7 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 
 	close_type(otype.actions, 0);
 	close_type(ofollower.actions, 0);
-	return 0;
+	return result - roffset;
 }
 
 enum { StringifyAlphaNum = 1 << 0 };
@@ -191,8 +255,8 @@ int stringify_acceptor(Type* type, Type* _, StringifyAccumulator* accumulator) {
 	} else if(type->compiler == (void*) &comp_StructType) {
 		strf(accumulator->string, accumulator->flags & StringifyAlphaNum
 				? "struct_%.*s" : "struct %.*s",
-				(int) type->StructType.identifier->base.size,
-				type->StructType.identifier->base.size);
+				(int) type->StructType.parent->identifier->base.size,
+				type->StructType.parent->identifier->base.size);
 	} else {
 		strf(accumulator->string, accumulator->flags & StringifyAlphaNum
 				? "UNKNOWN" : "~unknown");
@@ -223,8 +287,14 @@ int circular_acceptor(Type* type, Type* _, Type* compare) {
 }
 
 int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulator) {
+	printf("assigning:\t \33[3%dm%-24.*s\33[0m %.*s\n",
+			(int) ((size_t) wrapper->trace.slice.data / 16) % 6 + 1,
+			(int) wrapper->trace.slice.size, wrapper->trace.slice.data,
+			(int) follower->trace.slice.size, follower->trace.slice.data);
+
 	if(wrapper->flags & tfNumeric && !(follower->flags & tfNumeric)) return TestMismatch;
 
+	if((void*) wrapper == follower) return 1;
 	if(
 			traverse_type((void*) wrapper, NULL, (void*) &circular_acceptor, follower,
 				TraverseGenerics & TraverseIntermeditate) ||
@@ -258,6 +328,10 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 }
 
 int clash_acceptor(Type* type, Type* follower, ClashAccumulator* accumulator) {
+	printf("\33[90mclash:\t\t %-24.*s %.*s\n\33[0m",
+			(int) type->trace.slice.size, type->trace.slice.data,
+			(int) follower->trace.slice.size, follower->trace.slice.data);
+
 	if(type->compiler == (void*) &comp_Wrapper) {
 		return assign_wrapper((void*) type, follower, accumulator);
 	} else if(follower->compiler == (void*) &comp_Wrapper) {

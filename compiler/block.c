@@ -21,12 +21,11 @@ void comp_ReturnStatement(ReturnStatement* self, str* line,
 
 void comp_StructType(StructType* self, str* line, Compiler* compiler) {
 	strf(line, "struct ");
-	self->identifier->compiler((void*) self->identifier, line,
+	self->parent->identifier->compiler((void*) self->parent->identifier, line,
 			compiler);
 }
 
-void comp_structLiteral(StructLiteral* self, str* line,
-		Compiler* compiler) {
+void comp_structLiteral(StructLiteral* self, str* line, Compiler* compiler) {
 	strf(line, "(");
 	self->type->compiler((void*) self->type, line, compiler);
 	strf(line, ") {");

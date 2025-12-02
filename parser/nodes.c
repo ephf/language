@@ -38,7 +38,7 @@ typedef Vector(Scope*) Stack;
 void comp_Scope(Scope*, str*, Compiler*);
 
 typedef struct {
-	TypeLists variants;
+	Scope unique_map;
 	TypeLists stack;
 	DeclarationList propagate;
 } Generics;
@@ -164,9 +164,10 @@ typedef struct GenericType {
 void comp_GenericType(GenericType*, str*, Compiler*);
 
 typedef struct {
-	extends_Declaration;
+	extends_Type;
 	VariableDeclarationList fields;
 	Scope* body;
+	VariableDeclaration* parent;
 	unsigned compiled_declaration : 1;
 } StructType;
 void comp_StructType(StructType*, str*, Compiler*);

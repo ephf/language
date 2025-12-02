@@ -30,8 +30,7 @@ Scope* new_scope(Declaration* parent) {
 }
 
 void put(Scope* scope, str identifier, Declaration* declaration) {
-	ScopeEntries* entries = scope->data
-		+ fnv1a_u32_hash(identifier) % scope->cap;
+	ScopeEntries* entries = scope->data + fnv1a_u32_hash(identifier) % scope->cap;
 	push(entries, ((ScopeEntry) { identifier, declaration }));
 }
 

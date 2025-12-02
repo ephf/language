@@ -27,7 +27,7 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 	for(size_t i = 0; i < base_generics.size; i++) {
 		push(&input_generics, new_type((Type) { .Wrapper = {
 					.compiler = (void*) &comp_Wrapper,
-					.trace = base_generics.data[i]->trace,
+					.trace = variable->trace,
 					.flags = base_generics.data[i]->flags,
 					.compare = base_generics.data[i],
 		}}));
@@ -37,8 +37,7 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 		NodeList type_arguments = collect_until(parser, &expression, ',', '>');
 		for(size_t i = 0; i < type_arguments.size; i++) {
 			if(!(type_arguments.data[i]->flags & fType)) {
-				push(parser->tokenizer->messages, Err(
-							type_arguments.data[i]->trace,
+				push(parser->tokenizer->messages, Err(type_arguments.data[i]->trace,
 							str("expected a type in type arguments")));
 			}
 
@@ -50,6 +49,7 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 				break;
 			}
 
+			input_generics.data[i]->trace = type_arguments.data[i]->trace;
 			clash_types(input_generics.data[i], (void*) type_arguments.data[i],
 					type_arguments.data[i]->trace, parser->tokenizer->messages, 0);
 		}
@@ -59,13 +59,13 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 		StateActionGenerics, input_generics, (void*) declaration
 	};
 	variable->type = wrap_applied_generics(variable->type, input_generics, declaration);
-	push(&declaration->generics.variants, input_generics);
 }
 
 typedef Vector(Declaration**) DeclarationSetters;
 
 typedef struct {
 	TypeList base_generics;
+	Scope* scope;
 	DeclarationSetters declaration_setters;
 } GenericsCollection;
 
@@ -74,6 +74,7 @@ GenericsCollection collect_generics(Parser* parser) {
 
 	TypeList base_generics = { 0 };
 	DeclarationSetters declaration_setters = { 0 };
+	Scope* scope = new_scope(NULL);
 
 	while(parser->tokenizer->current.type
 			&& parser->tokenizer->current.type != '>') {
@@ -103,14 +104,13 @@ GenericsCollection collect_generics(Parser* parser) {
 		push(&base_generics, (void*) base_generic);
 		push(&declaration_setters, &base_generic->anchor->declaration);
 
-		put(last(parser->stack), identifier.trace.slice,
-				(void*) new_node((Node) { .VariableDeclaration = {
+		put(scope, identifier.trace.slice, (void*) new_node((Node) { .VariableDeclaration = {
 					.compiler = (void*) &comp_VariableDeclaration,
 					.trace = identifier.trace,
 					.flags = fConst | fType,
 					.type = (void*) generic_type,
 					.const_value = (void*) generic_type,
-				}}));
+		}}));
 
 		if(!try(parser->tokenizer, ',', 0)) break;
 	}
@@ -118,6 +118,7 @@ GenericsCollection collect_generics(Parser* parser) {
 
 	return (GenericsCollection) {
 		.base_generics = base_generics,
+		.scope = scope,
 		.declaration_setters = declaration_setters,
 	};
 }
@@ -129,6 +130,8 @@ void apply_generics(Declaration* declaration, GenericsCollection collection) {
 	for(size_t i = 0; i < collection.declaration_setters.size; i++) {
 		*collection.declaration_setters.data[i] = declaration;
 	}
+
+	init_scope(&declaration->generics.unique_map);
 }
 
 void append_generics_identifier(str* string, TypeList generics) {

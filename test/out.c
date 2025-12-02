@@ -3,31 +3,18 @@
 #include <string.h>
 #include <stdlib.h>
 int main();
-void outer__int32_t();
-void inner__int32_t();
-void outer__uint32_t();
-void inner__uint32_t();
+struct HeapPointer__int32_t { int32_t* pointer; };
+struct HeapPointer__int32_t alloc__int32_t(size_t);
 
 
 int main() {
-    outer__int32_t();
-    outer__uint32_t();
+    struct HeapPointer__int32_t x;
+    (x = alloc__int32_t(4));
+    free((x . pointer));
+    ((x . pointer) = malloc(4));
 }
 
 
-void outer__int32_t() {
-    inner__int32_t();
-}
-
-
-void inner__int32_t() {
-}
-
-
-void outer__uint32_t() {
-    inner__uint32_t();
-}
-
-
-void inner__uint32_t() {
+struct HeapPointer__int32_t alloc__int32_t(size_t size) {
+    return (struct HeapPointer__int32_t) { malloc(size) };
 }

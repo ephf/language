@@ -1,5 +1,15 @@
-void inner<T>() {}
-void outer<K>() { inner<K>(); }
+T* extern malloc<T>(usize size);
+void extern free<T>(T* ptr);
 
-outer<i32>();
-outer<u32>();
+struct HeapPointer<T> {
+	T* pointer;
+}
+
+HeapPointer<T> alloc<T>(usize size) {
+	return HeapPointer { malloc(size) };
+}
+
+auto x = alloc(4);
+
+free(x.pointer);
+x.pointer = malloc<i32>(4);

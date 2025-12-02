@@ -46,16 +46,16 @@ Node* statement(Parser* parser) {
 						.compiler = (void*) &comp_StructType,
 						.flags = fConstExpr,
 						.trace = stretch(trace_start, info.trace),
-						.identifier = info.identifier,
 					}
 			});
-			type->body = new_scope((void*) type);
+			(type->body = info.generics_collection.scope ?: new_scope(NULL))->parent
+				= (void*) type;
 			// TODO: create a flag that only allows type to compile
 			// if it is pointed to (in reference())
 			// this will prevent circular types and allow structs
 			// to reference themselves within themselves
 
-			Declaration* declaration = (void*) new_node((Node) {
+			VariableDeclaration* declaration = (void*) new_node((Node) {
 					.VariableDeclaration = {
 						.compiler = (void*) &comp_VariableDeclaration,
 						.flags = fConst | fType,
@@ -65,14 +65,22 @@ Node* statement(Parser* parser) {
 						.identifier = info.identifier,
 					}
 			});
-			put(info.scope, info.identifier->base, declaration);
+			put(info.scope, info.identifier->base, (void*) declaration);
+			apply_generics((void*) declaration, info.generics_collection);
+			info.identifier->declaration = (void*) declaration;
+			type->parent = declaration;
 
+			push(&parser->stack, type->body);
 			expect(parser->tokenizer, '{');
 			NodeList body = collect_until(parser, &statement, 0, '}');
+			parser->stack.size--;
 		
 			size_t field_end = 0;
 			for(; field_end < body.size; field_end++) {
-				Node* const next_field = body.data[field_end];
+				if(body.data[field_end]->compiler != &comp_Ignore
+						|| !body.data[field_end]->type) break;
+
+				Node* const next_field = (void*) body.data[field_end]->type;
 				if(next_field->compiler != (void*) &comp_Wrapper
 						|| !next_field->Wrapper.variable
 						|| !(next_field->flags & fIgnoreStatment)) break;
@@ -87,7 +95,7 @@ Node* statement(Parser* parser) {
 			}
 			type->body->children = declarations;
 
-			push(&last(parser->stack)->declarations, declaration);
+			push(&last(parser->stack)->declarations, (void*) declaration);
 			return new_node((Node) { .compiler = &comp_Ignore });
 		}
 	}
@@ -97,6 +105,7 @@ Node* statement(Parser* parser) {
 
 	if(expr->flags & fIgnoreStatment) return new_node((Node) {
 			.compiler = &comp_Ignore,
+			.type = (void*) expr,
 	});
 
 	return new_node((Node) { .Statement = {

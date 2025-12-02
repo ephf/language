@@ -37,6 +37,7 @@ int filter_missing(Type* type, void* ignore) {
 }
 
 int recycle_missing(Type* missing, Type* _, Parser* parser) {
+	if(missing->compiler != (void*) &comp_Missing) return 0;
 	Wrapper* possible_found = find(parser->stack, missing->trace);
 
 	if(possible_found && possible_found->flags & fType) {
@@ -48,8 +49,6 @@ int recycle_missing(Type* missing, Type* _, Parser* parser) {
 }
 
 Wrapper* declaration(Node* type, Token identifier, Parser* parser) {
-	// TODO: insert scope before calling info to catch generic
-	// type declarations
 	if(!(type->flags & fType)) {
 		push(parser->tokenizer->messages, Err(type->trace,
 					str("expected a type before declaration identifier")));
@@ -79,14 +78,15 @@ Wrapper* declaration(Node* type, Token identifier, Parser* parser) {
 					.identifier = info.identifier,
 				}
 		});
-		declaration->body = new_scope((void*) declaration);
+		(declaration->body = info.generics_collection.scope ?: new_scope(NULL))->parent
+			= (void*) declaration;
 		function_type->declaration = declaration;
 		info.identifier->declaration = (void*) declaration;
 
 		apply_generics((void*) declaration, info.generics_collection);
+		push(&parser->stack, declaration->body);
 		traverse_type((void*) type, NULL, (void*) &recycle_missing, parser, TraverseGenerics);
 
-		push(&parser->stack, declaration->body);
 		push(&info.scope->declarations, (void*) declaration);
 		put(info.scope, info.identifier->base, (void*) declaration);
 
