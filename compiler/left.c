@@ -9,8 +9,9 @@ Compiler* generics_compiler_context;
 void comp_Wrapper(Wrapper* self, str* line, Compiler* compiler) {
 	generics_compiler_context = compiler;
 
+	int applied_action;
 	if(self->action.type) {
-		type_state_action(self->action, 0);
+		applied_action = type_state_action(self->action, 0);
 	}
 	
 	if(self->variable) {
@@ -35,7 +36,7 @@ void comp_Wrapper(Wrapper* self, str* line, Compiler* compiler) {
 		}
 	}
 
-	if(self->action.type) {
+	if(self->action.type && applied_action) {
 		undo_type_state_action(self->action, 0);
 	}
 }
@@ -45,6 +46,14 @@ void comp_Identifier(Identifier* self, str* line, Compiler* compiler) {
 			&& !(self->declaration && self->declaration->compiler
 				== (void*) &comp_VariableDeclaration)) {
 		Identifier* const parent_ident = self->parent->FunctionDeclaration.identifier;
+		parent_ident->compiler((void*) parent_ident, line, compiler);
+		strf(line, "__");
+	}
+
+	if(self->parent && self->parent->compiler == (void*) &comp_StructType
+			&& self->declaration->compiler != (void*) &comp_VariableDeclaration) {
+		Identifier* const parent_ident = 
+			((StructType*)(void*) self->parent)->parent->identifier;
 		parent_ident->compiler((void*) parent_ident, line, compiler);
 		strf(line, "__");
 	}

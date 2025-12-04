@@ -19,6 +19,7 @@ Type* wrap_applied_generics(Type* type, TypeList generics, Declaration* declarat
 }
 
 void assign_generics(Wrapper* variable, Parser* parser) {
+	while(!variable->variable) variable = (void*) variable->ref;
 	Declaration* const declaration = (void*) variable->ref;
 	if(!declaration->generics.stack.size) return;
 	const TypeList base_generics = declaration->generics.stack.data[0];
@@ -49,9 +50,9 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 				break;
 			}
 
-			input_generics.data[i]->trace = type_arguments.data[i]->trace;
 			clash_types(input_generics.data[i], (void*) type_arguments.data[i],
 					type_arguments.data[i]->trace, parser->tokenizer->messages, 0);
+			input_generics.data[i]->trace = type_arguments.data[i]->trace;
 		}
 	}
 
@@ -121,6 +122,15 @@ GenericsCollection collect_generics(Parser* parser) {
 		.scope = scope,
 		.declaration_setters = declaration_setters,
 	};
+}
+
+void lock_base_generics(Generics generics) {
+	if(!generics.stack.size || 1) return;
+
+	const TypeList base_generics = generics.stack.data[0];
+	for(size_t i = 0; i < base_generics.size; i++) {
+		// base_generics.data[i]->Wrapper.anchor->offset = 0;
+	}
 }
 
 void apply_generics(Declaration* declaration, GenericsCollection collection) {

@@ -1,18 +1,13 @@
 T* extern malloc<T>(usize size);
 
-struct Rc<T> {
-	T* ptr;
-	usize counter;
+struct Vec<T> {
+	T* data;
+	usize size;
+	usize capacity;
+
+	Vec<T> new() {
+		return Vec { malloc(sizeof(T)), 0, 1 };
+	}
 }
 
-Rc<T> alloc_rc<T>(usize size) {
-	return Rc { malloc(size), 0 };
-}
-
-T* reference<T>(Rc<T> rc) {
-	rc.counter = rc.counter + 1;
-	return rc.ptr;
-}
-
-auto rc = alloc_rc(4);
-i32* ref = reference(rc);
+Vec<i32> numbers = Vec::new();

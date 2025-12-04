@@ -114,6 +114,7 @@ Wrapper* declaration(Node* type, Token identifier, Parser* parser) {
 			expect(parser->tokenizer, '{');
 			declaration->body->children = collect_until(parser, &statement, 0, '}');
 		}
+		lock_base_generics(declaration->generics);
 
 		parser->stack.size--;
 		return variable_of((void*) declaration, declaration->trace,
@@ -287,6 +288,7 @@ outer_while:
 					break;
 				}
 
+				//printf("size: %zu\n", global_state_actions.size);
 				Type* field_type = make_type_standalone(
 						struct_type->fields.data[found_index]->type);
 				close_type(opened.actions, 0);

@@ -10,6 +10,7 @@ void create_std_type(Scope* scope, str name, str internal) {
 	Type* type = new_type((Type) { .External = {
 			.compiler = (void*) &comp_External,
 			.flags = fConstExpr | tfNumeric,
+			.trace = { internal },
 			.data = internal,
 	}});
 
@@ -130,7 +131,9 @@ int main(int argc, char** argv) {
 
 	in_compiler_step = 1;
 	str temp_line = { 0 };
+	puts("COMPILATION START");
 	entry->compiler((void*) entry, &temp_line, &compiler);
+	puts("COMPILATION COMPLETE");
 
 	int error = 0;
 	for(size_t i = 0; i < messages.size; i++) {

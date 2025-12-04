@@ -46,6 +46,23 @@ Node* left(Parser* parser) {
 				return (void*) argument->type;
 			}
 
+			if(streq(token.trace.slice, str("sizeof"))) {
+				expect(parser->tokenizer, '(');
+				NodeList arguments = { 0 };
+				push(&arguments, right(left(parser), parser, 15));
+
+				return new_node((Node) { .FunctionCall = {
+						.compiler = (void*) &comp_FunctionCall,
+						.trace = stretch(token.trace, expect(parser->tokenizer, ')').trace),
+						.function = new_node((Node) { .External = {
+								.compiler = (void*) &comp_External,
+								.data = str("sizeof"),
+						}}),
+						.arguments = arguments,
+						.type = (void*) find(parser->stack, (Trace) { .slice = str("usize") }),
+				}});
+			}
+
 			// TODO: sizeof() & fix segfault on function calls on missing values
 
 			if(streq(token.trace.slice, str("const"))) {

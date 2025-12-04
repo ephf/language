@@ -4,6 +4,12 @@ enum {
 	TokenIdentifier = 'a',
 	TokenNumber,
 	TokenString,
+
+	TokenDoubleColon,
+};
+
+unsigned char const tokenizer_double_characters[128] = {
+	[':'] = TokenDoubleColon,
 };
 
 typedef struct {
@@ -59,12 +65,17 @@ Token create_token(Trace trace) {
 		return (Token) { trace, TokenString };
 	}
 
+	if(tokenizer_double_characters[*trace.slice.data] &&
+			trace.slice.data[0] == trace.slice.data[1]) {
+		trace.col += trace.slice.size = 2;
+		return (Token) { trace, tokenizer_double_characters[*trace.slice.data] };
+	}
+
 	trace.col += trace.slice.size = 1;
 	return (Token) { trace, *trace.slice.data };
 }
 
-Tokenizer new_tokenizer(char* filename, char* data,
-		Messages* messages) {
+Tokenizer new_tokenizer(char* filename, char* data, Messages* messages) {
 	return (Tokenizer) {
 		.current = create_token((Trace) {
 				.slice = { 0, 0, data },
@@ -78,23 +89,17 @@ Tokenizer new_tokenizer(char* filename, char* data,
 
 Token next(Tokenizer* tokenizer) {
 	Token next = tokenizer->current;
-	if(!next.type) push(tokenizer->messages, Err(
-				next.trace,
-				str("expected a token, but got "
-					"\33[35mend of file\33[0m")));
+	if(!next.type) push(tokenizer->messages, Err(next.trace,
+				str("expected a token, but got \33[35mend of file\33[0m")));
 	else tokenizer->current = create_token(next.trace);
 	return next;
 }
 
 Token expect(Tokenizer* tokenizer, unsigned char type) {
 	Token expect = next(tokenizer);
-	if(expect.type != type) push(tokenizer->messages, Err(
-				expect.trace,
-				strf(0, "expected type [\33[35m%c (%u)\33[0m], "
-					"but got '\33[35m%.*s\33[0m'",
-					type, type,
-					(int) expect.trace.slice.size,
-					expect.trace.slice.data)));
+	if(expect.type != type) push(tokenizer->messages, Err(expect.trace,
+				strf(0, "expected type [\33[35m%c (%u)\33[0m], but got '\33[35m%.*s\33[0m'",
+					type, type, (int) expect.trace.slice.size, expect.trace.slice.data)));
 	return expect;
 }
 

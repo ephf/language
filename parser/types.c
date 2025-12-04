@@ -14,13 +14,23 @@ enum {
 	ActionNoChildCompilation = 1 << 3,
 };
 
-void type_state_action(TypeStateAction action, unsigned flags) {
-	if(!(flags & ActionKeepGlobalState)) {
-		push(&global_state_actions, action);
-	}
+OpenedType open_type_wa(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void*),
+		void* accumulator, unsigned flags);
 
+#define open_type(type, flags) open_type_wa(type, NULL, NULL, NULL, flags);
+
+int type_state_action(TypeStateAction action, unsigned flags) {
 	switch(action.type) {
 		case StateActionGenerics:
+			for(size_t i = 0; i < action.TypeList.size; i++) {
+				if(action.TypeList.data[i]->compiler == (void*) &comp_Wrapper
+						&& action.TypeList.data[i]->Wrapper.anchor
+						&& action.TypeList.data[i]->Wrapper.anchor->declaration
+						== (void*) action.target) {
+					return 0;
+				}
+			}
+
 			push(&action.target->Declaration.generics.stack, action.TypeList);
 
 			static int noloop = 1;
@@ -47,6 +57,12 @@ void type_state_action(TypeStateAction action, unsigned flags) {
 			}
 			break;
 	}
+
+	if(!(flags & ActionKeepGlobalState)) {
+		push(&global_state_actions, action);
+	}
+
+	return 1;
 }
 
 void undo_type_state_action(TypeStateAction action, unsigned flags) {
@@ -70,6 +86,7 @@ void undo_type_state_action(TypeStateAction action, unsigned flags) {
 
 TypeList find_last_generic_action(TypeStateActions actions, Declaration* declaration) {
 	for(size_t i = actions.size; i > 0; i--) {
+next:
 		switch(actions.data[i - 1].type) {
 			case StateActionGenerics:
 				if(actions.data[i - 1].target == (void*) declaration) {
@@ -98,8 +115,9 @@ Type* peek_type(Type* type, TypeStateAction* action, unsigned flags) {
 
 		if(type->Wrapper.ref) {
 			if(type->Wrapper.action.type) {
-				type_state_action(type->Wrapper.action, flags);
-				*action = type->Wrapper.action;
+				if(type_state_action(type->Wrapper.action, flags)) {
+					*action = type->Wrapper.action;
+				}
 			}
 
 			return type->Wrapper.variable
@@ -136,8 +154,6 @@ OpenedType open_type_wa(Type* type, Type* follower, int (*acceptor)(Type*, Type*
 
 	return opened_type;
 }
-
-#define open_type(type, flags) open_type_wa(type, NULL, NULL, NULL, flags);
 
 void close_type(TypeStateActions actions, unsigned flags) {
 	for(size_t i = actions.size; i > 0; i--) {
@@ -194,8 +210,7 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 
 	int result = 0, roffset = 0;
 	if(!(flags & TraverseIntermeditate)) {
-		result = acceptor(otype.type, ofollower.type, accumulator);
-		if(result) roffset = 1;
+		roffset = !!(result = acceptor(otype.type, ofollower.type, accumulator));
 	}
 
 	if(result)
@@ -212,8 +227,11 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 			TypeList b = find_last_generic_action(ofollower.actions,
 					(void*) otype.type->StructType.parent);
 
-			if(a.size != b.size) result = 1;
-			else for(size_t i = 0; i < a.size; i++) {
+			printf("things: %zu %zu\n", a.size, b.size);
+			if(!a.size) a = otype.type->StructType.parent->generics.stack.data[0];
+			if(!b.size) b = otype.type->StructType.parent->generics.stack.data[0];
+
+			for(size_t i = 0; i < a.size; i++) {
 				if((result = traverse_type(a.data[i], b.data[i], acceptor,
 								accumulator, flags)))
 					break;
@@ -222,6 +240,8 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 			result = traverse_generics((void*) otype.type->StructType.parent, acceptor,
 					accumulator, flags);
 		}
+
+		printf("result: %d\n", result);
 
 		if(result);
 		else if(ofollower.type && ofollower.type->StructType.fields.size
@@ -296,9 +316,10 @@ int circular_acceptor(Type* type, Type* _, Type* compare) {
 }
 
 int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulator) {
-	printf("assigning:\t \33[3%dm%-24.*s\33[0m %.*s\n",
+	printf("assigning:\t \33[3%dm%-24.*s \33[3%dm%.*s\33[0m\n",
 			(int) ((size_t) wrapper->trace.slice.data / 16) % 6 + 1,
 			(int) wrapper->trace.slice.size, wrapper->trace.slice.data,
+			(int) ((size_t) follower->trace.slice.data / 16) % 6 + 1,
 			(int) follower->trace.slice.size, follower->trace.slice.data);
 
 	if(wrapper->flags & tfNumeric && !(follower->flags & tfNumeric)) return TestMismatch;
@@ -318,12 +339,21 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 	}
 
 	if(!(accumulator->flags & ClashPassive)) {
-		Type* const standalone = make_type_standalone(
-				follower->compiler == (void*) &comp_Wrapper && follower->Wrapper.anchor ?
-				(void*) follower->Wrapper.anchor : follower);
+		if(follower->compiler == (void*) &comp_Wrapper && follower->Wrapper.anchor) {
+			// TODO: open wrapper->compare
+			if(traverse_type(follower, NULL, (void*) &circular_acceptor,
+						(void*) wrapper->compare, TraverseGenerics & TraverseIntermeditate)) {
+				wrapper->anchor = follower->Wrapper.anchor;
+				// wrapper->anchor = (void*) new_type(*(Type*)(void*) follower->Wrapper.anchor);
+				return 1;
+			}
 
-		if(wrapper->assign_compare) wrapper->compare = standalone;
-		else wrapper->ref = (void*) standalone;
+			const OpenedType anchor = open_type((void*) follower->Wrapper.anchor, 0);
+			wrapper->ref = (void*) make_type_standalone(anchor.type);
+			close_type(anchor.actions, 0);
+		} else {
+			wrapper->ref = (void*) make_type_standalone(follower);
+		}
 
 		wrapper->flags = follower->flags;
 
@@ -341,7 +371,8 @@ int clash_acceptor(Type* type, Type* follower, ClashAccumulator* accumulator) {
 			(int) type->trace.slice.size, type->trace.slice.data,
 			(int) follower->trace.slice.size, follower->trace.slice.data);
 
-	if(type->compiler == (void*) &comp_Wrapper) {
+	if(type->compiler == (void*) &comp_Wrapper &&
+			!(type->Wrapper.anchor && follower->compiler == (void*) &comp_Wrapper)) {
 		return assign_wrapper((void*) type, follower, accumulator);
 	} else if(follower->compiler == (void*) &comp_Wrapper) {
 		return assign_wrapper((void*) follower, type, accumulator);

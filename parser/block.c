@@ -73,6 +73,7 @@ Node* statement(Parser* parser) {
 			push(&parser->stack, type->body);
 			expect(parser->tokenizer, '{');
 			NodeList body = collect_until(parser, &statement, 0, '}');
+			lock_base_generics(declaration->generics);
 			parser->stack.size--;
 		
 			size_t field_end = 0;
