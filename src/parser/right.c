@@ -12,6 +12,8 @@ enum {
 	RightAssignment,
 	RightCall,
 	RightFieldAccess,
+	RightCompare,
+	RightIndex,
 };
 
 typedef struct {
@@ -19,11 +21,14 @@ typedef struct {
 				  type : 4;
 } RightOperator;
 
+extern int collecting_type_arguments;
 RightOperator right_operator_table[128] = {
-	['.'] = { 1, RightFieldAccess },
-	['('] = { 1, RightCall },
+	['.'] = { 1, RightFieldAccess }, [TokenRightArrow] = { 1, RightFieldAccess },
+	['['] = { 1, RightIndex }, ['('] = { 1, RightCall },
 	['*'] = { 3, RightAltBinary }, ['/'] = { 3 }, ['%'] = { 3 },
 	['+'] = { 4 }, ['-'] = { 4 },
+	['<'] = { 6, RightCompare }, ['>'] = { 6, RightCompare },
+	[TokenLessEqual] = { 6, RightCompare }, [TokenGreaterEqual] = { 6, RightCompare },
 	[TokenIdentifier] = { 13, RightDeclaration },
 	['='] = { 14, RightAssignment },
 };
@@ -114,7 +119,7 @@ Wrapper* declaration(Node* type, Token identifier, Parser* parser) {
 			expect(parser->tokenizer, '{');
 			declaration->body->children = collect_until(parser, &statement, 0, '}');
 		}
-		lock_base_generics(declaration->generics);
+		lock_base_generics(&declaration->generics);
 
 		parser->stack.size--;
 		return variable_of((void*) declaration, declaration->trace,
@@ -149,8 +154,9 @@ Message see_declaration(Declaration* declaration, Node* node) {
 Node* right(Node* lefthand, Parser* parser, unsigned char precedence) {
 	RightOperator operator;
 outer_while:
-	while((operator = right_operator_table [parser->tokenizer->current.type]).precedence) {
+	while((operator = right_operator_table[parser->tokenizer->current.type]).precedence) {
 		if(operator.precedence >= precedence + (operator.type == RightAssignment)) break;
+		if(operator.precedence == 6 && collecting_type_arguments) break;
 
 		switch(operator.type) {
 			case RightAltBinary: {
@@ -169,6 +175,7 @@ outer_while:
 					push(parser->tokenizer->messages, Err( lefthand->trace,
 								str("left hand of assignment is not a mutable value")));
 				}
+			case RightCompare:
 			case RightBinary: binary: {
 				Token operator_token = next(parser->tokenizer);
 				Node* righthand = right(left(parser), parser, operator.precedence);
@@ -195,6 +202,21 @@ outer_while:
 				break;
 			}
 
+			case RightIndex: {
+				next(parser->tokenizer);
+				Node* index = expression(parser);
+
+				lefthand = dereference(new_node((Node) { .BinaryOperation = {
+							.compiler = (void*) &comp_BinaryOperation,
+							.type = lefthand->type,
+							.left = lefthand,
+							.operator = str("+"),
+							.right = index,
+				}}), stretch(lefthand->trace, expect(parser->tokenizer, ']').trace),
+						parser->tokenizer->messages);
+				break;
+			}
+
 			case RightCall: {
 				next(parser->tokenizer);
 
@@ -218,6 +240,23 @@ outer_while:
 				}
 
 				NodeList arguments = collect_until(parser, &expression, ',', ')');
+				if(lefthand->compiler == (void*) &comp_Wrapper
+						&& lefthand->Wrapper.bound_self) {
+					resv(&arguments, 1);
+					memmove(arguments.data + 1, arguments.data,
+							arguments.size * sizeof(Node*));
+					arguments.data[0] = lefthand->Wrapper.bound_self;
+					arguments.size++;
+
+					const OpenedType open_self = open_type(arguments.data[0]->type, 0);
+					if(signature.data[1]->compiler == (void*) &comp_PointerType
+							&& open_self.type->compiler != (void*) &comp_PointerType) {
+						arguments.data[0] = reference(arguments.data[0],
+								arguments.data[0]->trace);
+					}
+					close_type(open_self.actions, 0);
+				}
+
 				for(size_t i = 0; i < arguments.size; i++) {
 					if(i + 1 >= signature.size) {
 						push(parser->tokenizer->messages, Err(
@@ -255,7 +294,13 @@ outer_while:
 			}
 
 			case RightFieldAccess: {
-				const OpenedType opened = open_type((void*) lefthand->type, 0);
+				Type* type = lefthand->type;
+				if(parser->tokenizer->current.type == TokenRightArrow) {
+					type = (void*) dereference((void*) type, lefthand->trace,
+							parser->tokenizer->messages);
+				}
+
+				const OpenedType opened = open_type((void*) type, 0);
 				StructType* const struct_type = (void*) opened.type;
 
 				str operator_token = next(parser->tokenizer).trace.slice;
@@ -263,6 +308,11 @@ outer_while:
 
 				// TODO: error message if not struct
 				if(struct_type->compiler != (void*) &comp_StructType) {
+					push(parser->tokenizer->messages, Err(lefthand->trace, strf(0,
+									"'\33[35m%.*s\33[0m' is not a structure",
+									(int) lefthand->trace.slice.size,
+									lefthand->trace.slice.data)));
+					close_type(opened.actions, 0);
 					return lefthand;
 				}
 
@@ -275,6 +325,20 @@ outer_while:
 				}
 
 				if(found_index < 0) {
+					Wrapper* child = get(*struct_type->body, field_token.trace);
+					if(child) {
+						child->bound_self = lefthand;
+						lefthand->type = make_type_standalone(lefthand->type);
+
+						if(global_state_actions.size) {
+							child->action = lefthand->type->Wrapper.action;
+						}
+
+						close_type(opened.actions, 0);
+						lefthand = (void*) child;
+						break;
+					}
+
 					push(parser->tokenizer->messages, Err(
 								field_token.trace, strf(0,
 									"no field named '\33[35m%.*s\33[0m' on struct "
@@ -288,7 +352,6 @@ outer_while:
 					break;
 				}
 
-				//printf("size: %zu\n", global_state_actions.size);
 				Type* field_type = make_type_standalone(
 						struct_type->fields.data[found_index]->type);
 				close_type(opened.actions, 0);

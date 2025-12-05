@@ -4,12 +4,20 @@ enum {
 	TokenIdentifier = 'a',
 	TokenNumber,
 	TokenString,
+	TokenRightArrow,
 
 	TokenDoubleColon,
+
+	TokenLessEqual,
+	TokenGreaterEqual,
 };
 
 unsigned char const tokenizer_double_characters[128] = {
 	[':'] = TokenDoubleColon,
+};
+
+unsigned char const tokenizer_equal_characters[128] = {
+	['<'] = TokenLessEqual, ['>'] = TokenGreaterEqual,
 };
 
 typedef struct {
@@ -69,6 +77,16 @@ Token create_token(Trace trace) {
 			trace.slice.data[0] == trace.slice.data[1]) {
 		trace.col += trace.slice.size = 2;
 		return (Token) { trace, tokenizer_double_characters[*trace.slice.data] };
+	}
+
+	if(tokenizer_equal_characters[*trace.slice.data] && trace.slice.data[1] == '=') {
+		trace.col += trace.slice.size = 2;
+		return (Token) { trace, tokenizer_equal_characters[*trace.slice.data] };
+	}
+
+	if(trace.slice.data[0] == '-' && trace.slice.data[1] == '>') {
+		trace.col += trace.slice.size = 2;
+		return (Token) { trace, TokenRightArrow };
 	}
 
 	trace.col += trace.slice.size = 1;

@@ -18,11 +18,13 @@ Type* wrap_applied_generics(Type* type, TypeList generics, Declaration* declarat
 	}});
 }
 
+int collecting_type_arguments = 0;
+
 void assign_generics(Wrapper* variable, Parser* parser) {
 	while(!variable->variable) variable = (void*) variable->ref;
 	Declaration* const declaration = (void*) variable->ref;
-	if(!declaration->generics.stack.size) return;
-	const TypeList base_generics = declaration->generics.stack.data[0];
+	if(!declaration->generics.base.size) return;
+	const TypeList base_generics = declaration->generics.base;
 
 	TypeList input_generics = { 0 };
 	for(size_t i = 0; i < base_generics.size; i++) {
@@ -35,7 +37,9 @@ void assign_generics(Wrapper* variable, Parser* parser) {
 	}
 
 	if(try(parser->tokenizer, '<', 0)) {
+		collecting_type_arguments = 1;
 		NodeList type_arguments = collect_until(parser, &expression, ',', '>');
+		collecting_type_arguments = 0;
 		for(size_t i = 0; i < type_arguments.size; i++) {
 			if(!(type_arguments.data[i]->flags & fType)) {
 				push(parser->tokenizer->messages, Err(type_arguments.data[i]->trace,
@@ -124,19 +128,15 @@ GenericsCollection collect_generics(Parser* parser) {
 	};
 }
 
-void lock_base_generics(Generics generics) {
-	if(!generics.stack.size || 1) return;
-
-	const TypeList base_generics = generics.stack.data[0];
-	for(size_t i = 0; i < base_generics.size; i++) {
-		// base_generics.data[i]->Wrapper.anchor->offset = 0;
-	}
+void lock_base_generics(Generics* generics) {
+	generics->stack.size = 0;
 }
 
 void apply_generics(Declaration* declaration, GenericsCollection collection) {
 	if(!collection.base_generics.size) return;
 
-	push(&declaration->generics.stack, collection.base_generics);
+	push(&declaration->generics.stack,
+			(declaration->generics.base = collection.base_generics));
 	for(size_t i = 0; i < collection.declaration_setters.size; i++) {
 		*collection.declaration_setters.data[i] = declaration;
 	}

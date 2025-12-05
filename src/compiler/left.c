@@ -30,7 +30,7 @@ void comp_Wrapper(Wrapper* self, str* line, Compiler* compiler) {
 		}
 	} else {
 		if(!self->ref) {
-			strf(line, "/* auto */ int");
+			strf(line, self->flags & tfNumeric ? "int" : "/* auto */ int");
 		} else {
 			self->ref->compiler(self->ref, line, compiler);
 		}
@@ -42,31 +42,39 @@ void comp_Wrapper(Wrapper* self, str* line, Compiler* compiler) {
 }
 
 void comp_Identifier(Identifier* self, str* line, Compiler* compiler) {
-	if(self->parent && self->parent->compiler == (void*) &comp_FunctionDeclaration
-			&& !(self->declaration && self->declaration->compiler
-				== (void*) &comp_VariableDeclaration)) {
-		Identifier* const parent_ident = self->parent->FunctionDeclaration.identifier;
-		parent_ident->compiler((void*) parent_ident, line, compiler);
-		strf(line, "__");
-	}
+	if(!(self->flags & fExternal)) {
+		if(self->parent && self->parent->compiler == (void*) &comp_FunctionDeclaration
+				&& !(self->declaration && self->declaration->compiler
+					== (void*) &comp_VariableDeclaration)) {
+			Identifier* const parent_ident = self->parent->FunctionDeclaration.identifier;
+			parent_ident->compiler((void*) parent_ident, line, compiler);
+			strf(line, "__");
+		}
 
-	if(self->parent && self->parent->compiler == (void*) &comp_StructType
-			&& self->declaration->compiler != (void*) &comp_VariableDeclaration) {
-		Identifier* const parent_ident = 
-			((StructType*)(void*) self->parent)->parent->identifier;
-		parent_ident->compiler((void*) parent_ident, line, compiler);
-		strf(line, "__");
+		if(self->parent && self->parent->compiler == (void*) &comp_StructType
+				&& self->declaration->compiler != (void*) &comp_VariableDeclaration) {
+			Identifier* const parent_ident = 
+				((StructType*)(void*) self->parent)->parent->identifier;
+			parent_ident->compiler((void*) parent_ident, line, compiler);
+			strf(line, "__");
+		}
 	}
 
 	strf(line, "%.*s", (int) self->base.size, self->base.data);
 
-	if(self->declaration && self->declaration->generics.stack.size > 1
+	if(self->declaration && self->declaration->generics.base.size
+			&& self->declaration->generics.stack.size
 			&& !(self->flags & fExternal)) {
 		append_generics_identifier(line, last(self->declaration->generics.stack));
 	}
 }
 
 void comp_Scope(Scope* self, str* line, Compiler* compiler) {
+	if(self->wrap_brackets) {
+		str bracket = new_line(compiler);
+		push(&compiler->sections.data[compiler->open_section].lines, strf(&bracket, "{"));
+	}
+
 	CompilerSection* const section = compiler->sections.data + compiler->open_section;
 	strf(&section->indent, "    ");
 
@@ -80,6 +88,11 @@ void comp_Scope(Scope* self, str* line, Compiler* compiler) {
 	}
 
 	compiler->sections.data[compiler->open_section].indent.size -= 4;
+
+	if(self->wrap_brackets) {
+		str bracket = new_line(compiler);
+		push(&compiler->sections.data[compiler->open_section].lines, strf(&bracket, "}"));
+	}
 }
 
 void comp_Missing(Missing* self, str* line, Compiler* compiler) {
@@ -95,4 +108,10 @@ void comp_External(External* self, str* line, Compiler* compiler) {
 void comp_GenericType(GenericType* self, str* line, Compiler* compiler) {
 	Type* const base = last(self->declaration->generics.stack).data[self->index];
 	base->compiler((void*) base, line, compiler);
+}
+
+void comp_Prefix(Prefix* self, str* line, Compiler* compiler) {
+	strf(line, "(%.*s", (int) self->prefix.size, self->prefix.data);
+	self->child->compiler(self->child, line, compiler);
+	strf(line, ")");
 }

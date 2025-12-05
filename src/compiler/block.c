@@ -13,7 +13,7 @@ void comp_ReturnStatement(ReturnStatement* self, str* line,
 		Compiler* compiler) {
 	str statement_line = new_line(compiler);
 	strf(&statement_line, "return ");
-	self->value->compiler((void*) self->value, &statement_line, compiler);
+	if(self->value) self->value->compiler((void*) self->value, &statement_line, compiler);
 	push(&compiler->sections.data[compiler->open_section].lines, strf(&statement_line, ";"));
 }
 
@@ -39,4 +39,17 @@ void comp_structLiteral(StructLiteral* self, str* line, Compiler* compiler) {
 		self->fields.data[i]->compiler(self->fields.data[i], line, compiler);
 	}
 	strf(line, " }");
+}
+
+void comp_Control(Control* self, str* line, Compiler* compiler) {
+	str block = new_line(compiler);
+	strf(&block, "%.*s(", (int) self->keyword.size, self->keyword.data);
+
+	for(size_t i = 0; i < self->inputs.size; i++) {
+		if(i) strf(&block, ";");
+		self->inputs.data[i]->compiler(self->inputs.data[i], &block, compiler);
+	}
+
+	push(&compiler->sections.data[compiler->open_section].lines, strf(&block, ") "));
+	self->body->compiler((void*) self->body, &block, compiler);
 }

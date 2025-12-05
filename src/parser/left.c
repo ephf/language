@@ -3,6 +3,16 @@
 Node* right(Node* lefthand, Parser* parser, unsigned char precedence);
 
 Node* reference(Node* node, Trace trace) {
+	if(node->compiler == (void*) &comp_Wrapper && node->Wrapper.self_argument) {
+// 		node->Wrapper.ref->VariableDeclaration.type =
+// 			(void*) reference((void*) node->Wrapper.ref->VariableDeclaration.type, trace);
+		// node->type = (void*) reference((void*) node->type, trace);
+		*node->Wrapper.ref->VariableDeclaration.type = *(Type*)(void*)
+			reference((void*) new_type(*node->Wrapper.ref->VariableDeclaration.type),
+					trace);
+		return node;
+	}
+
 	if(node->flags & fType) {
 		return (void*) new_type((Type) { .PointerType = {
 				.compiler = (void*) &comp_PointerType,
@@ -11,7 +21,38 @@ Node* reference(Node* node, Trace trace) {
 		}});
 	}
 
-	return node;
+	return new_node((Node) { .Prefix = {
+			.compiler = (void*) &comp_Prefix,
+			.trace = trace,
+			.type = (void*) reference((void*) node->type, trace),
+			.child = node,
+			.prefix = str("&"),
+	}});
+}
+
+Node* dereference(Node* node, Trace trace, Messages* messages) {
+	if(node->flags & fType) {
+		const OpenedType open = open_type((void*) node, 0);
+
+		if(open.type->compiler != (void*) &comp_PointerType) {
+			push(messages, Err(trace, strf(0, "Cannot derefence a non-pointer value")));
+			close_type(open.actions, 0);
+			return node;
+		}
+
+		Type* const child = make_type_standalone(open.type->PointerType.base);
+		close_type(open.actions, 0);
+		return (void*) child;
+	}
+
+	return new_node((Node) { .Prefix = {
+			.compiler = (void*) &comp_Prefix,
+			.flags = fMutable,
+			.trace = trace,
+			.type = (void*) dereference((void*) node->type, trace, messages),
+			.child = node,
+			.prefix = str("*"),
+	}});
 }
 
 Node* left(Parser* parser) {
@@ -35,6 +76,14 @@ Node* left(Parser* parser) {
 			if(streq(token.trace.slice, str("auto"))) {
 				return (void*) new_type((Type) { .Wrapper = {
 						.compiler = (void*) &comp_Wrapper,
+						.trace = token.trace,
+				}});
+			}
+
+			if(streq(token.trace.slice, str("int"))) {
+				return (void*) new_type((Type) { .Wrapper = {
+						.compiler = (void*) &comp_Wrapper,
+						.flags = tfNumeric,
 						.trace = token.trace,
 				}});
 			}
@@ -99,8 +148,37 @@ Node* left(Parser* parser) {
 				}});
 			}
 
+
 			IdentifierInfo info = new_identifier(token, parser);
 			unbox((void*) info.identifier);
+
+			if(!info.value) {
+				if(streq(token.trace.slice, str("self")) && parser->stack.size >= 2) {
+					StructType* parent = (void*) parser->stack
+						.data[parser->stack.size - 2]->parent;
+					if(parent && parent->compiler == (void*) &comp_StructType) {
+						VariableDeclaration* const self = (void*) new_node(
+								(Node) { .VariableDeclaration = {
+								.compiler = (void*) &comp_VariableDeclaration,
+								.trace = token.trace,
+								.type = (void*) variable_of((void*) parent->parent,
+										token.trace, 0),
+								.identifier = (void*) new_node((Node) { .Identifier = {
+										.compiler = (void*) &comp_Identifier,
+										// set declaration
+										.base = token.trace.slice,
+										}}),
+								}});
+						self->identifier->declaration = (void*) self;
+						put(last(parser->stack), token.trace.slice, (void*) self);
+
+						Wrapper* variable = variable_of((void*) self, token.trace,
+								fIgnoreStatment);
+						variable->self_argument = 1;
+						return (void*) variable;
+					}
+				}
+			}
 
 			if(!info.value) return (void*) new_type((Type) {
 					.Missing = {
@@ -184,6 +262,17 @@ ret:
 					}}),
 					.data = token.trace.slice,
 			}});		
+
+		case '&': {
+			Node* expression = right(left(parser), parser, 2);
+			return reference(expression, stretch(token.trace, expression->trace));
+		}
+
+		case '*': {
+			Node* expression = right(left(parser), parser, 2);
+			return dereference(expression, stretch(token.trace, expression->trace),
+					parser->tokenizer->messages);
+		}
 	}
 
 	push(parser->tokenizer->messages, Err(token.trace,

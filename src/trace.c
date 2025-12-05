@@ -61,20 +61,23 @@ int print_message(Message message) {
 		return 0;
 	}
 
-	char underline[message.trace.slice.data - message.trace.line_start
-		+ message.trace.slice.size];
-	for(size_t i = 0; i < sizeof(underline); i++)
-		underline[i] =
-			i >= message.trace.slice.data - message.trace.line_start
-			? '~' : ' ';
+	char* line_start = message.trace.line_start;
+	size_t offset = message.trace.slice.data - message.trace.line_start;
+	while(*line_start && *line_start <= ' ') {
+		line_start++;
+		offset--;
+	}
+
+	char underline[offset + message.trace.slice.size];
+	for(size_t i = 0; i < sizeof(underline); i++) {
+		underline[i] = i >= offset ? '~' : ' ';
+	}
+
 	printf("\33[1m%s:%u:%u: %s%s:\33[0m %.*s\n"
 			"%4d | %s\n     : %s%.*s\33[0m\n",
-			message.trace.filename,
-			message.trace.row, message.trace.col,
-			message.highlight, message.label,
-			(int) message.content.size,
-			message.content.data,
-			message.trace.row, message.trace.line_start,
+			message.trace.filename, message.trace.row, message.trace.col,
+			message.highlight, message.label, (int) message.content.size, message.content.data,
+			message.trace.row, line_start,
 			message.highlight,
 			(int) sizeof(underline), underline);
 

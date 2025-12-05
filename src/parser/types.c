@@ -188,7 +188,7 @@ int traverse_type(Type*, Type*, int (*)(Type*, Type*, void*), void*, unsigned);
 
 static inline int traverse_generics(Declaration* declaration,
 		int (*acceptor)(Type*, Type*, void*), void* accumulator, unsigned flags) {
-	if(!(flags & TraverseGenerics) || declaration->generics.stack.size <= 1) return 0;
+	if(!(flags & TraverseGenerics) || !declaration->generics.stack.size) return 0;
 	
 	const TypeList generics = last(declaration->generics.stack);
 	for(size_t i = 0; i < generics.size; i++) {
@@ -213,9 +213,8 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 		roffset = !!(result = acceptor(otype.type, ofollower.type, accumulator));
 	}
 
-	if(result)
-		;;
-	if(follower && otype.type->compiler != ofollower.type->compiler) {
+	if(result);
+	else if(follower && otype.type->compiler != ofollower.type->compiler) {
 		result = 1;
 	} else if(otype.type->compiler == (void*) &comp_PointerType) {
 		result = traverse_type(otype.type->PointerType.base, ofollower.type
@@ -227,7 +226,7 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 			TypeList b = find_last_generic_action(ofollower.actions,
 					(void*) otype.type->StructType.parent);
 
-			printf("things: %zu %zu\n", a.size, b.size);
+			// printf("things: %zu %zu\n", a.size, b.size);
 			if(!a.size) a = otype.type->StructType.parent->generics.stack.data[0];
 			if(!b.size) b = otype.type->StructType.parent->generics.stack.data[0];
 
@@ -240,8 +239,6 @@ int traverse_type(Type* type, Type* follower, int (*acceptor)(Type*, Type*, void
 			result = traverse_generics((void*) otype.type->StructType.parent, acceptor,
 					accumulator, flags);
 		}
-
-		printf("result: %d\n", result);
 
 		if(result);
 		else if(ofollower.type && ofollower.type->StructType.fields.size
@@ -322,7 +319,8 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 			(int) ((size_t) follower->trace.slice.data / 16) % 6 + 1,
 			(int) follower->trace.slice.size, follower->trace.slice.data);
 
-	if(wrapper->flags & tfNumeric && !(follower->flags & tfNumeric)) return TestMismatch;
+	if(wrapper->flags & tfNumeric && !(follower->flags & tfNumeric)
+			&& follower->compiler != (void*) &comp_Wrapper) return TestMismatch;
 
 	if((void*) wrapper == follower) return 1;
 	if(
@@ -355,7 +353,11 @@ int assign_wrapper(Wrapper* wrapper, Type* follower, ClashAccumulator* accumulat
 			wrapper->ref = (void*) make_type_standalone(follower);
 		}
 
-		wrapper->flags = follower->flags;
+		if(wrapper->flags & tfNumeric && !(follower->flags & tfNumeric)) {
+			follower->flags = wrapper->flags;
+		} else {
+			wrapper->flags = follower->flags;
+		}
 
 		if(follower->compiler == (void*) &comp_Wrapper) {
 			if(wrapper->compare) follower->Wrapper.compare = wrapper->compare;

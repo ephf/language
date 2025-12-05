@@ -1,0 +1,32 @@
+T* extern malloc<T>(usize size);
+T* extern realloc<T>(T* ptr, usize size);
+
+struct Vec<T> {
+	T* data;
+	usize size;
+	usize capacity;
+
+	Vec<T> new() {
+		return Vec { 
+			data: malloc(sizeof(T)),
+			size: 0,
+			capacity: 1
+		};
+	}
+
+	void reserve(&self, usize n) {
+		if(self->size + n <= self->capacity) return;
+
+		while(self->capacity < self->size + n) {
+			self->capacity = self->capacity * 2;
+		}
+
+		self->data = realloc(self->data, self->capacity);
+	}
+
+	void push(&self, T item) {
+		self->reserve(1);
+		self->data[self->size] = item;
+		self->size = self->size + 1;
+	}
+}

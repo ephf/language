@@ -1,0 +1,7 @@
+struct io {
+	void extern puts(char* str);
+}
+
+void print(char* message) {
+	io::puts(message);
+}

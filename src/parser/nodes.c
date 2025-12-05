@@ -33,6 +33,7 @@ typedef struct {
 	DeclarationList declarations;
 	NodeList children;
 	Declaration* parent;
+	unsigned wrap_brackets : 1;
 } Scope;
 typedef Vector(Scope*) Stack;
 void comp_Scope(Scope*, str*, Compiler*);
@@ -40,6 +41,7 @@ void comp_Scope(Scope*, str*, Compiler*);
 typedef struct {
 	Scope unique_map;
 	TypeLists stack;
+	TypeList base;
 	DeclarationList propagate;
 } Generics;
 
@@ -77,8 +79,10 @@ typedef struct {
 	TypeStateAction action;
 	Type* compare;
 	struct GenericType* anchor;
+	Node* bound_self;
 	unsigned variable : 1,
-			 assign_compare : 1;
+			 assign_compare : 1,
+			 self_argument : 1;
 } Wrapper;
 void comp_Wrapper(Wrapper*, str*, Compiler*);
 
@@ -160,6 +164,7 @@ typedef struct GenericType {
 	extends_Type;
 	Declaration* declaration;
 	size_t index;
+	unsigned offset;
 } GenericType;
 void comp_GenericType(GenericType*, str*, Compiler*);
 
@@ -178,6 +183,21 @@ typedef struct {
 	strs field_names;
 } StructLiteral;
 void comp_structLiteral(StructLiteral*, str*, Compiler*);
+
+typedef struct {
+	extends_Node;
+	str keyword;
+	NodeList inputs;
+	Scope* body;
+} Control;
+void comp_Control(Control*, str*, Compiler*);
+
+typedef struct {
+	extends_Node;
+	str prefix;
+	Node* child;
+} Prefix;
+void comp_Prefix(Prefix*, str*, Compiler*);
 
 union Type {
 	struct { extends_Type; };
@@ -209,6 +229,7 @@ union Node {
 	Missing Missing;
 	External External;
 	Wrapper Wrapper;
+	Prefix Prefix;
 
 	Type Type;
 
@@ -221,6 +242,7 @@ union Node {
 	Statement Statement;
 	ReturnStatement ReturnStatement;
 	StructLiteral StructLiteral;
+	Control Control;
 };
 
 void comp_Ignore(Node* self, str* line, Compiler* compiler) {}

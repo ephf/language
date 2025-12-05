@@ -1,10 +1,9 @@
-a: build
-	mkdir -p test
-	cd test \
-		&& ../out/c main.lang \
-		&& $(CC) out.c -o prog \
-		&& ./prog
+out = qc
 
 build:
-	mkdir -p out
-	$(CC) main.c -o out/c
+	$(CC) src/main.c -o $(out)
+
+test: build
+	./qc test/main.qk -o test/main.c
+	$(CC) test/main.c -o test/main
+	./test/main

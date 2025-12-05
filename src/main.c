@@ -120,6 +120,7 @@ int main(int argc, char** argv) {
 	push(&compiler.sections.data[0].lines, str("#include <stdio.h>"));
 	push(&compiler.sections.data[0].lines, str("#include <string.h>"));
 	push(&compiler.sections.data[0].lines, str("#include <stdlib.h>"));
+	push(&compiler.sections.data[0].lines, str("#include <stdbool.h>"));
 
 	push(&parser.stack, new_scope(0));
 	insert_std_numerics(parser.stack.data[0]);

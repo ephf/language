@@ -15,15 +15,11 @@ void comp_struct_declaration(StructType* self, str* line, Compiler* compiler) {
 	strf(&typedef_line, "};");
 
 	push(&compiler->sections.data[0].lines, typedef_line);
+	self->body->compiler((void*) self->body, line, compiler);
 }
 
 void comp_VariableDeclaration(VariableDeclaration* self, str* line, Compiler* compiler) {
-	if(
-			// self->type->flags & fConst
-			// && self->const_value->flags & fConstExpr
-			// && !self->observed
-			self->generics.stack.size == 1)
-		return;
+	if(self->generics.base.size && !self->generics.stack.size) return;
 
 	if(self->const_value && self->const_value->flags & fType) {
 		const OpenedType opened = open_type((void*) self->const_value, 0);
@@ -106,7 +102,8 @@ void dual_function_compiler(FunctionDeclaration* self, Compiler* compiler, int h
 }
 
 void comp_FunctionDeclaration(FunctionDeclaration* self, str* line, Compiler* compiler) {
-	if(self->flags & fExternal || self->generics.stack.size == 1) return;
+	if(self->flags & fExternal || self->generics.base.size && !self->generics.stack.size)
+		return;
 
 	dual_function_compiler(self, compiler, 1);
 	dual_function_compiler(self, compiler, 0);
