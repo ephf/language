@@ -19,8 +19,8 @@ struct Range {
 struct str {
 	Slice<char> slice;
 
-	str new(char* string_literal) {
-		return str { string_literal, strlen(string_literal) };
+	str from(char* string_literal) {
+		return str { Slice<char> { string_literal, strlen(string_literal) } };
 	}
 
 	usize len(self) {
@@ -31,10 +31,13 @@ struct str {
 struct String {
 	Vec<char> vector;
 
-	String new(char* string_literal) {
-		Vec<char> vector = Vec::new();
-		str string = str::new(string_literal);
+	String new() {
+		return String { Vec<char>::new() };
+	}
 
+	String from(char* string_literal) {
+		Vec<char> vector = Vec::new();
+		str string = str::from(string_literal);
 		vector.push_slice(string.slice);
 		return String { vector };
 	}
@@ -45,7 +48,7 @@ struct String {
 }
 
 String str::to_owned(str self) {
-	String string = String { Vec<char>::new() };
+	String string = String::new();
 	string.vector.push_slice(self.slice);
 	return string;
 }

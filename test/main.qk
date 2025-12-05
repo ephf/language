@@ -1,6 +1,6 @@
 import lib::io;
 
-str x = str::new("Hello World");
+str x = str::from("Hello World");
 print(x);
 
 String owned = x.to_owned();

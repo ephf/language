@@ -225,7 +225,6 @@ outer_while:
 
 				const OpenedType opened_function_type = open_type(lefthand->type, 0);
 				Type* const open_function_type = opened_function_type.type;
-					printf("%zu\n", opened_function_type.actions.size);
 
 				if(open_function_type->compiler != (void*) &comp_FunctionType) {
 					push(parser->tokenizer->messages, Err(lefthand->trace,

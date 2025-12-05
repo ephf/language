@@ -25,5 +25,5 @@ $ ./qc main.qk -o main.c
 ```quark
 import lib::io;
 
-print("Hello World");
+print(str::from("Hello World"));
 ```

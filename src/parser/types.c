@@ -282,6 +282,7 @@ int stringify_acceptor(Type* type, Type* _, StringifyAccumulator* accumulator) {
 				? "struct_%.*s" : "struct %.*s",
 				(int) type->StructType.parent->identifier->base.size,
 				type->StructType.parent->identifier->base.data);
+		return 1;
 	} else {
 		strf(accumulator->string, accumulator->flags & StringifyAlphaNum
 				? "UNKNOWN" : "~unknown");

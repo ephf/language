@@ -12,7 +12,7 @@ struct String { struct Vec__char vector; };
 int main();
 struct Range Range__new(size_t, size_t);
 size_t Range__len(struct Range);
-struct str str__new(char*);
+struct str str__from(char*);
 size_t str__len(struct str);
 struct String str__to_owned(struct str);
 struct Vec__char Vec__char__new();
@@ -20,7 +20,8 @@ size_t Vec__char__len(struct Vec__char);
 void Vec__char__reserve(struct Vec__char*, size_t);
 void Vec__char__push(struct Vec__char*, char);
 void Vec__char__push_slice(struct Vec__char*, struct Slice__char);
-struct String String__new(char*);
+struct String String__new();
+struct String String__from(char*);
 struct str String__to_str(struct String);
 void print(struct str);
 
@@ -29,7 +30,7 @@ int main() {
     struct str x;
     struct String owned;
     char* _;
-    (x = str__new("Hello World"));
+    (x = str__from("Hello World"));
     print(x);
     (owned = str__to_owned(x));
     Vec__char__push((&(owned . vector)), (*(_ = "!")));
@@ -47,8 +48,8 @@ size_t Range__len(struct Range self) {
 }
 
 
-struct str str__new(char* string_literal) {
-    return (struct str) { string_literal, strlen(string_literal) };
+struct str str__from(char* string_literal) {
+    return (struct str) { (struct Slice__char) { string_literal, strlen(string_literal) } };
 }
 
 
@@ -59,7 +60,7 @@ size_t str__len(struct str self) {
 
 struct String str__to_owned(struct str self) {
     struct String string;
-    (string = (struct String) { Vec__char__new() });
+    (string = String__new());
     Vec__char__push_slice((&(string . vector)), (self . slice));
     return string;
 }
@@ -106,11 +107,16 @@ void Vec__char__push_slice(struct Vec__char* self, struct Slice__char slice) {
 }
 
 
-struct String String__new(char* string_literal) {
+struct String String__new() {
+    return (struct String) { Vec__char__new() };
+}
+
+
+struct String String__from(char* string_literal) {
     struct Vec__char vector;
     struct str string;
     (vector = Vec__char__new());
-    (string = str__new(string_literal));
+    (string = str__from(string_literal));
     Vec__char__push_slice((&vector), (string . slice));
     return (struct String) { vector };
 }
