@@ -19,7 +19,7 @@ $ ./qc main.qk -o main.c
 ## Hello World
 
 ```quark
-void extern puts(char* str);
+import lib::io;
 
-puts("Hello World");
+print("Hello World");
 ```
