@@ -1,3 +1,4 @@
 import lib::vector;
 
 Vec<i32> numbers = Vec::new();
+numbers.push(5);

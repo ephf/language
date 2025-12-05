@@ -225,6 +225,7 @@ outer_while:
 
 				const OpenedType opened_function_type = open_type(lefthand->type, 0);
 				Type* const open_function_type = opened_function_type.type;
+					printf("%zu\n", opened_function_type.actions.size);
 
 				if(open_function_type->compiler != (void*) &comp_FunctionType) {
 					push(parser->tokenizer->messages, Err(lefthand->trace,
@@ -329,10 +330,8 @@ outer_while:
 					if(child) {
 						child->bound_self = lefthand;
 						lefthand->type = make_type_standalone(lefthand->type);
-
-						if(global_state_actions.size) {
-							child->action = lefthand->type->Wrapper.action;
-						}
+						child->action = lefthand->type->Wrapper.action;
+						child->type = make_type_standalone(child->type);
 
 						close_type(opened.actions, 0);
 						lefthand = (void*) child;

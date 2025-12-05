@@ -14,6 +14,7 @@ void Vec__int32_t__push(struct Vec__int32_t*, int32_t);
 int main() {
     struct Vec__int32_t numbers;
     (numbers = Vec__int32_t__new());
+    Vec__int32_t__push((&numbers), 5);
 }
 
 
