@@ -129,7 +129,9 @@ Node* left(Parser* parser) {
 
 			if(streq(token.trace.slice, str("extern"))) {
 				expect(parser->tokenizer, '<');
+				collecting_type_arguments = 1;
 				Type* type = (void*) expression(parser);
+				collecting_type_arguments = 0;
 				if(!(type->flags & fType)) type = type->type;
 				expect(parser->tokenizer, '>');
 

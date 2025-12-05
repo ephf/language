@@ -1,4 +1,9 @@
-import lib::vector;
+import lib::io;
 
-Vec<i32> numbers = Vec::new();
-numbers.push(5);
+str x = str::new("Hello World");
+print(x);
+
+String owned = x.to_owned();
+owned.vector.push(*(char* _ = "!"));
+
+print(owned.to_str());
