@@ -1,4 +1,6 @@
-# Quark Language
+<div align="center">
+    <img alt="Quark Programming Language" src="assets/title.png" width="50%" />
+</div>
 
 > This langauge is in early stages of development, everything is subject to change
 
