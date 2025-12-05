@@ -4,6 +4,8 @@
 
 > This langauge is in early stages of development, everything is subject to change
 
+## Quick Start
+
 To build the compiler (default: `qc`):
 
 ```sh
