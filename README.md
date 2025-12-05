@@ -20,6 +20,10 @@ Compile a `.qk` file to C:
 $ ./qc main.qk -o main.c
 ```
 
+## Examples
+
+See source files in [lib/](lib/) for examples or the current [test file](test/main.qk).
+
 ## Hello World
 
 ```quark
